@@ -349,9 +349,6 @@ name_acquired_handler (GDBusConnection *connection,
         GDBusProxy *proxy;
 
         proxy = gnome_settings_session_get_session_proxy ();
-        /* Always call this first, as Setenv can only be called before
-           any client registers */
-        set_locale (proxy);
 #ifdef HAVE_IBUS
         set_legacy_ibus_env_vars (proxy);
 #endif
