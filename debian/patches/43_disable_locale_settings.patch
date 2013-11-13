@@ -1,0 +1,25 @@
+Description: Make sure that no locales are set, even if the gsettings "region" key has
+ been assigned a value in the past, since they are set in Ubuntu via ~/.pam_environment.
+Forwarded: not-needed
+Author: Gunnar Hjalmarsson <ubuntu@gunnar.cc>
+
+*
+* The set_locale() function is questionable anyhow, since it's called after ~/.profile
+* is sourced by e.g. lightdm or gdm, which prevents users from fine tuning the locale
+* settings by editing ~/.profile.
+*
+
+Index: gnome-settings-daemon-3.8.5/gnome-settings-daemon/main.c
+===================================================================
+--- gnome-settings-daemon-3.8.5.orig/gnome-settings-daemon/main.c	2013-11-12 16:32:34.642469698 +1300
++++ gnome-settings-daemon-3.8.5/gnome-settings-daemon/main.c	2013-11-12 16:32:34.638469698 +1300
+@@ -349,9 +349,6 @@
+         GDBusProxy *proxy;
+ 
+         proxy = gnome_settings_session_get_session_proxy ();
+-        /* Always call this first, as Setenv can only be called before
+-           any client registers */
+-        set_locale (proxy);
+ #ifdef HAVE_IBUS
+         set_legacy_ibus_env_vars (proxy);
+ #endif
