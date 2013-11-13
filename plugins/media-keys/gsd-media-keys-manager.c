@@ -1011,6 +1011,12 @@ gnome_session_shutdown (GsdMediaKeysManager *manager)
 }
 
 static void
+do_logout_action (GsdMediaKeysManager *manager)
+{
+        execute (manager, "gnome-session-quit --logout", FALSE);
+}
+
+static void
 do_eject_action_cb (GDrive              *drive,
                     GAsyncResult        *res,
                     GsdMediaKeysManager *manager)
@@ -2204,7 +2210,7 @@ do_action (GsdMediaKeysManager *manager,
                 do_sound_action (manager, deviceid, VOLUME_UP_KEY, TRUE, TRUE);
                 break;
         case LOGOUT_KEY:
-                gnome_session_shutdown (manager);
+                do_logout_action (manager);
                 break;
         case EJECT_KEY:
                 do_eject_action (manager);
