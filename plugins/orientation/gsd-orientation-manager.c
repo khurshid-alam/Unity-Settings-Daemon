@@ -23,6 +23,7 @@
 
 #include "config.h"
 
+#include <fcntl.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
@@ -88,6 +89,14 @@ static void     gsd_orientation_manager_finalize    (GObject                    
 G_DEFINE_TYPE (GsdOrientationManager, gsd_orientation_manager, G_TYPE_OBJECT)
 
 static gpointer manager_object = NULL;
+
+#define MPU_THRESHOLD 12000
+#define MPU_POLL_INTERVAL 1
+
+static gboolean is_mpu6050 = FALSE;
+static char *mpu6050_accel_x = NULL;
+static char *mpu6050_accel_y = NULL;
+static gboolean mpu_timer(GsdOrientationManager *manager);
 
 static GObject *
 gsd_orientation_manager_constructor (GType                     type,
@@ -314,8 +323,11 @@ orientation_lock_changed_cb (GSettings             *settings,
                 return;
 
         manager->priv->orientation_lock = new;
-
+	
         if (new == FALSE) {
+                if (is_mpu6050) {
+                        g_timeout_add_seconds(MPU_POLL_INTERVAL, (GSourceFunc) mpu_timer, manager);
+                }
                 /* Handle the rotations that could have occurred while
                  * we were locked */
                 do_rotation (manager);
@@ -382,12 +394,14 @@ on_bus_gotten (GObject               *source_object,
 static GUdevDevice *
 get_accelerometer (GUdevClient *client)
 {
-        GList *list, *l;
+        GList *list, *listiio, *l;
         GUdevDevice *ret, *parent;
 
         /* Look for a device with the ID_INPUT_ACCELEROMETER=1 property */
         ret = NULL;
         list = g_udev_client_query_by_subsystem (client, "input");
+        listiio = g_udev_client_query_by_subsystem (client, "iio");
+        list = g_list_concat(list, listiio);
         for (l = list; l != NULL; l = l->next) {
                 GUdevDevice *dev;
 
@@ -418,6 +432,53 @@ get_accelerometer (GUdevClient *client)
         return ret;
 }
 
+static int read_sysfs_attr_as_int(const char *filename) {
+	int i, c;
+	char buf[40];
+	int fd = open(filename, O_RDONLY);
+	if (fd < 0)
+		return 0;
+	c = read(fd, buf, 40);
+	if (c < 0)
+		return 0;
+	close(fd);
+	sscanf(buf, "%d", &i);
+	
+	return i;
+}
+
+static gboolean mpu_timer(GsdOrientationManager *manager) {
+	int x, y;
+	static gboolean first = TRUE;
+	OrientationUp orientation = manager->priv->prev_orientation;
+
+        if (manager->priv->xrandr_proxy == NULL)
+                return TRUE;
+
+	x = read_sysfs_attr_as_int(mpu6050_accel_x);
+	y = read_sysfs_attr_as_int(mpu6050_accel_y);
+
+	if (x > MPU_THRESHOLD)
+		orientation = ORIENTATION_NORMAL;
+	if (x < -MPU_THRESHOLD)
+		orientation = ORIENTATION_BOTTOM_UP;
+	if (y > MPU_THRESHOLD)
+		orientation = ORIENTATION_RIGHT_UP;
+	if (y < -MPU_THRESHOLD)
+		orientation = ORIENTATION_LEFT_UP;
+
+        if (orientation != manager->priv->prev_orientation || first) {
+                first = FALSE;
+                manager->priv->prev_orientation = orientation;
+                g_debug ("Orientation changed to '%s', switching screen rotation",
+                         orientation_to_string (manager->priv->prev_orientation));
+
+                do_rotation (manager);
+        }
+
+        return !manager->priv->orientation_lock;
+}
+
 static gboolean
 gsd_orientation_manager_idle_cb (GsdOrientationManager *manager)
 {
@@ -442,6 +503,16 @@ gsd_orientation_manager_idle_cb (GsdOrientationManager *manager)
         g_debug ("Found accelerometer at sysfs path '%s'", manager->priv->sysfs_path);
 
         manager->priv->prev_orientation = get_orientation_from_device (dev);
+
+        /* Poll the sysfs attributes exposed by MPU6050 as it is not an uevent based input driver */
+        if (g_strcmp0 (g_udev_device_get_sysfs_attr (dev, "name"), "mpu6050") == 0) {
+                manager->priv->prev_orientation = ORIENTATION_NORMAL;
+                g_timeout_add_seconds(MPU_POLL_INTERVAL, (GSourceFunc) mpu_timer, manager);
+                mpu6050_accel_x = g_build_filename(manager->priv->sysfs_path, "in_accel_x_raw", NULL);
+                mpu6050_accel_y = g_build_filename(manager->priv->sysfs_path, "in_accel_y_raw", NULL);
+                is_mpu6050 = TRUE;
+        }
+
         g_object_unref (dev);
 
         /* Start process of owning a D-Bus name */
