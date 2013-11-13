@@ -959,7 +959,7 @@ prepare_xkb_options (GsdKeyboardManager *manager,
          * and doesn't call us so we can't set the group switching XKB
          * option in the first place otherwise the X server's switch
          * will take effect and we get a broken configuration. */
-        if (n_sources < 2)
+        if (n_sources < 2 || g_strcmp0 (g_getenv ("XDG_CURRENT_DESKTOP"), "Unity") == 0)
                 strip_xkb_option (options, "grp:");
 
         options_str = build_xkb_options_string (options);
@@ -1006,6 +1006,8 @@ apply_xkb_settings (GsdKeyboardManager *manager,
 
         gnome_xkb_info_free_var_defs (xkb_var_defs);
         g_free (rules_file_path);
+
+        XkbLockModifiers (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), XkbUseCoreKbd, LockMask, 0);
 }
 
 static void
