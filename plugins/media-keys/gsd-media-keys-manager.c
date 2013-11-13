@@ -971,6 +971,22 @@ do_media_action (GsdMediaKeysManager *manager,
 }
 
 static void
+do_terminal_action (GsdMediaKeysManager *manager)
+{
+        GSettings *settings;
+        char *term;
+
+        settings = g_settings_new ("org.gnome.desktop.default-applications.terminal");
+        term = g_settings_get_string (settings, "exec");
+
+        if (term)
+        execute (manager, term, FALSE);
+
+        g_free (term);
+        g_object_unref (settings);
+}
+
+static void
 gnome_session_shutdown (GsdMediaKeysManager *manager)
 {
 	GError *error = NULL;
@@ -2215,6 +2231,9 @@ do_action (GsdMediaKeysManager *manager,
         case AREA_SCREENSHOT_KEY:
         case AREA_SCREENSHOT_CLIP_KEY:
                 gsd_screenshot_take (type);
+                break;
+        case TERMINAL_KEY:
+                do_terminal_action (manager);
                 break;
         case WWW_KEY:
                 do_url_action (manager, "http", timestamp);
