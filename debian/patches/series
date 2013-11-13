@@ -1,4 +1,3 @@
-git_keybindings_add_screen_reader_toggle.patch
 git_revert_gsd-keygrab.patch
 git_revert_remove_automount_helper.patch
 ubuntu-fix-desktop-file.patch
