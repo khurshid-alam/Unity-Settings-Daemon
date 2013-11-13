@@ -650,6 +650,10 @@ set_tap_to_click (GdkDevice *device,
                                  &bytes_after, &data);
 
         if (rc == Success && type == XA_INTEGER && format == 8 && nitems >= 7) {
+               /* Set MR mapping for corner tapping on the right side*/
+               data[0] = (state) ? 2 : 0;
+               data[1] = (state) ? 3 : 0;
+
                 /* Set RLM mapping for 1/2/3 fingers*/
                 data[4] = (state) ? ((left_handed) ? 3 : 1) : 0;
                 data[5] = (state) ? ((left_handed) ? 1 : 3) : 0;
