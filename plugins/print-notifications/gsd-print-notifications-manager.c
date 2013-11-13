@@ -345,7 +345,7 @@ process_cups_notification (GsdPrintNotificationsManager *manager,
         static const char * const reasons[] = {
                 "toner-low",
                 "toner-empty",
-                "connecting-to-device",
+                /*"connecting-to-device",*/
                 "cover-open",
                 "cups-missing-filter",
                 "door-open",
@@ -362,7 +362,7 @@ process_cups_notification (GsdPrintNotificationsManager *manager,
                 /* Translators: The printer has no toner left (same as in system-config-printer) */
                 N_("Toner empty"),
                 /* Translators: The printer is in the process of connecting to a shared network output device (same as in system-config-printer) */
-                N_("Not connected?"),
+                /*N_("Not connected?"),*/
                 /* Translators: One or more covers on the printer are open (same as in system-config-printer) */
                 N_("Cover open"),
                 /* Translators: A filter or backend is not installed (same as in system-config-printer) */
@@ -388,7 +388,7 @@ process_cups_notification (GsdPrintNotificationsManager *manager,
                 /* Translators: The printer has no toner left (same as in system-config-printer) */
                 N_("Printer '%s' has no toner left."),
                 /* Translators: The printer is in the process of connecting to a shared network output device (same as in system-config-printer) */
-                N_("Printer '%s' may not be connected."),
+                /*N_("Printer '%s' may not be connected."),*/
                 /* Translators: One or more covers on the printer are open (same as in system-config-printer) */
                 N_("The cover is open on printer '%s'."),
                 /* Translators: A filter or backend is not installed (same as in system-config-printer) */

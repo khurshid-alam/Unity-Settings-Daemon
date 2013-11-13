@@ -1,4 +1,3 @@
-45_suppress-printer-may-not-be-connected-notification.patch
 #48_register_client_before_idle_callbacks.patch
 revert_background_dropping.patch
 52_sync_background_to_accountsservice.patch
