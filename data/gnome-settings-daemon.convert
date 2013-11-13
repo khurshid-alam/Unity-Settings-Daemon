@@ -61,6 +61,9 @@ volume-down = /apps/gnome_settings_daemon/keybindings/volume_down
 volume-mute = /apps/gnome_settings_daemon/keybindings/volume_mute
 volume-up = /apps/gnome_settings_daemon/keybindings/volume_up
 www = /apps/gnome_settings_daemon/keybindings/www
+screenshot = /apps/metacity/global_keybindings/run_command_screenshot
+window-screenshot = /apps/metacity/global_keybindings/run_command_window_screenshot
+terminal = /apps/metacity/global_keybindings/run_command_terminal
 
 [org.gnome.settings-daemon.plugins.mouse]
 active = /apps/gnome_settings_daemon/plugins/mouse/active
