@@ -1,4 +1,3 @@
-touchscreen_rotation.patch
 nexus-orientation.patch
 fix_broken_user_sounds_permissions.patch
 fix_media_keys_on_unity.patch
