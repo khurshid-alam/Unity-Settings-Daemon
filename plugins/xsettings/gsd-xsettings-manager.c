@@ -243,7 +243,9 @@ struct GnomeXSettingsManagerPrivate
         GsdXSettingsGtk   *gtk;
 
         guint              shell_name_watch_id;
+        guint              unity_name_watch_id;
         gboolean           have_shell;
+        gboolean           have_unity;
 
         guint              notify_idle_id;
 };
@@ -707,17 +709,18 @@ stop_fontconfig_monitor (GnomeXSettingsManager  *manager)
 }
 
 static void
-notify_have_shell (GnomeXSettingsManager   *manager,
-                   gboolean                 have_shell)
+notify_have_shell (GnomeXSettingsManager   *manager)
 {
         int i;
 
         gnome_settings_profile_start (NULL);
-        if (manager->priv->have_shell == have_shell)
-                return;
-        manager->priv->have_shell = have_shell;
         for (i = 0; manager->priv->managers [i]; i++) {
-                xsettings_manager_set_int (manager->priv->managers [i], "Gtk/ShellShowsAppMenu", have_shell);
+                /* Shell is showing appmenu if either GNOME Shell or Unity is running. */
+                xsettings_manager_set_int (manager->priv->managers [i], "Gtk/ShellShowsAppMenu",
+                                           manager->priv->have_shell || manager->priv->have_unity);
+                /* Shell is showing menubar *only* if Unity runs */
+                xsettings_manager_set_int (manager->priv->managers [i], "Gtk/ShellShowsMenubar",
+                                           manager->priv->have_unity);
         }
         queue_notify (manager);
         gnome_settings_profile_end (NULL);
@@ -729,7 +732,10 @@ on_shell_appeared (GDBusConnection *connection,
                    const gchar     *name_owner,
                    gpointer         user_data)
 {
-        notify_have_shell (user_data, TRUE);
+        GnomeXSettingsManager *manager = user_data;
+
+        manager->priv->have_shell = TRUE;
+        notify_have_shell (manager);
 }
 
 static void
@@ -737,7 +743,33 @@ on_shell_disappeared (GDBusConnection *connection,
                       const gchar     *name,
                       gpointer         user_data)
 {
-        notify_have_shell (user_data, FALSE);
+        GnomeXSettingsManager *manager = user_data;
+
+        manager->priv->have_shell = FALSE;
+        notify_have_shell (manager);
+}
+
+static void
+on_unity_appeared (GDBusConnection *connection,
+                   const gchar     *name,
+                   const gchar     *name_owner,
+                   gpointer         user_data)
+{
+        GnomeXSettingsManager *manager = user_data;
+
+        manager->priv->have_unity = TRUE;
+        notify_have_shell (manager);
+}
+
+static void
+on_unity_disappeared (GDBusConnection *connection,
+                      const gchar     *name,
+                      gpointer         user_data)
+{
+        GnomeXSettingsManager *manager = user_data;
+
+        manager->priv->have_unity = FALSE;
+        notify_have_shell (manager);
 }
 
 static void
@@ -860,13 +892,27 @@ setup_xsettings_managers (GnomeXSettingsManager *manager)
 static void
 start_shell_monitor (GnomeXSettingsManager *manager)
 {
-        notify_have_shell (manager, TRUE);
+        notify_have_shell (manager);
         manager->priv->have_shell = TRUE;
         manager->priv->shell_name_watch_id = g_bus_watch_name (G_BUS_TYPE_SESSION,
                                                                "org.gnome.Shell",
                                                                0,
                                                                on_shell_appeared,
                                                                on_shell_disappeared,
+                                                               manager,
+                                                               NULL);
+}
+
+static void
+start_unity_monitor (GnomeXSettingsManager *manager)
+{
+        notify_have_shell (manager);
+        manager->priv->have_unity = TRUE;
+        manager->priv->shell_name_watch_id = g_bus_watch_name (G_BUS_TYPE_SESSION,
+                                                               "com.canonical.AppMenu.Registrar",
+                                                               0,
+                                                               on_unity_appeared,
+                                                               on_unity_disappeared,
                                                                manager,
                                                                NULL);
 }
@@ -939,6 +985,7 @@ gnome_xsettings_manager_start (GnomeXSettingsManager *manager,
         start_fontconfig_monitor (manager);
 
         start_shell_monitor (manager);
+        start_unity_monitor (manager);
 
         for (i = 0; manager->priv->managers [i]; i++)
                 xsettings_manager_set_string (manager->priv->managers [i],
@@ -983,6 +1030,9 @@ gnome_xsettings_manager_stop (GnomeXSettingsManager *manager)
         }
 
         stop_fontconfig_monitor (manager);
+
+        if (manager->priv->unity_name_watch_id > 0)
+                g_bus_unwatch_name (manager->priv->unity_name_watch_id);
 
         if (p->settings != NULL) {
                 g_hash_table_destroy (p->settings);
