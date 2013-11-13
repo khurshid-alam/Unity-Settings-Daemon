@@ -207,6 +207,7 @@ struct GsdPowerManagerPrivate
         GDBusProxy              *logind_proxy;
         gint                     inhibit_lid_switch_fd;
         gboolean                 inhibit_lid_switch_taken;
+        gboolean                 inhibit_lid_switch_action;
         gint                     inhibit_suspend_fd;
         gboolean                 inhibit_suspend_taken;
         guint                    inhibit_lid_switch_timer_id;
@@ -240,6 +241,7 @@ static gchar    *engine_get_summary (GsdPowerManager *manager);
 static gdouble   engine_get_percentage (GsdPowerManager *manager);
 static void      do_power_action_type (GsdPowerManager *manager, GsdPowerActionType action_type);
 static void      do_lid_closed_action (GsdPowerManager *manager);
+static void      inhibit_lid_switch (GsdPowerManager *manager);
 static void      uninhibit_lid_switch (GsdPowerManager *manager);
 static void      main_battery_or_ups_low_changed (GsdPowerManager *manager, gboolean is_low);
 static gboolean  idle_is_session_inhibited (GsdPowerManager *manager, guint mask, gboolean *is_inhibited);
@@ -2141,6 +2143,9 @@ suspend_on_lid_close (GsdPowerManager *manager)
 {
         GsdXrandrBootBehaviour val;
 
+        if (manager->priv->inhibit_lid_switch_action)
+                return FALSE;
+
         if (!external_monitor_is_connected (manager->priv->rr_screen))
                 return TRUE;
 
@@ -2190,6 +2195,26 @@ restart_inhibit_lid_switch_timer (GsdPowerManager *manager)
                 g_source_remove (manager->priv->inhibit_lid_switch_timer_id);
                 manager->priv->inhibit_lid_switch_timer_id = 0;
                 setup_inhibit_lid_switch_timer (manager);
+        }
+}
+
+static void
+setup_lid_closed_action (GsdPowerManager *manager)
+{
+        GsdPowerActionType policy;
+
+        if (up_client_get_on_battery (manager->priv->up_client)) {
+            policy = g_settings_get_enum (manager->priv->settings, "lid-close-battery-action");
+        } else {
+            policy = g_settings_get_enum (manager->priv->settings, "lid-close-ac-action");
+        }
+
+        if (policy == GSD_POWER_ACTION_NOTHING) {
+		inhibit_lid_switch (manager);
+                manager->priv->inhibit_lid_switch_action = TRUE;
+        } else {
+                uninhibit_lid_switch (manager);
+                manager->priv->inhibit_lid_switch_action = FALSE;
         }
 }
 
@@ -2259,6 +2284,10 @@ do_lid_closed_action (GsdPowerManager *manager)
                         lock_screensaver (manager);
                 }
         }
+        else {
+                if (manager->priv->inhibit_lid_switch_action)
+                        lock_screensaver (manager);
+        }
 }
 
 static void
@@ -2272,6 +2301,8 @@ up_client_changed_cb (UpClient *client, GsdPowerManager *manager)
             notify_close_if_showing (&manager->priv->notification_low);
             main_battery_or_ups_low_changed (manager, FALSE);
         }
+
+        setup_lid_closed_action (manager);
 
         /* same state */
         tmp = up_client_get_lid_is_closed (manager->priv->up_client);
@@ -3131,6 +3162,10 @@ engine_settings_key_changed_cb (GSettings *settings,
                 idle_configure (manager);
                 return;
         }
+        if (g_str_has_prefix (key, "lid-close")) {
+                setup_lid_closed_action (manager);
+                return;
+        }
 }
 
 static void
@@ -3540,6 +3575,7 @@ gsd_power_manager_start (GsdPowerManager *manager,
         /* don't blank inside a VM */
         manager->priv->is_virtual_machine = gsd_power_is_hardware_a_vm ();
 
+        setup_lid_closed_action (manager);
         gnome_settings_profile_end (NULL);
         return TRUE;
 }
@@ -3587,6 +3623,7 @@ gsd_power_manager_stop (GsdPowerManager *manager)
                 close (manager->priv->inhibit_lid_switch_fd);
                 manager->priv->inhibit_lid_switch_fd = -1;
                 manager->priv->inhibit_lid_switch_taken = FALSE;
+                manager->priv->inhibit_lid_switch_action = FALSE;
         }
         if (manager->priv->inhibit_suspend_fd != -1) {
                 close (manager->priv->inhibit_suspend_fd);
@@ -3623,6 +3660,7 @@ gsd_power_manager_init (GsdPowerManager *manager)
         manager->priv = GSD_POWER_MANAGER_GET_PRIVATE (manager);
         manager->priv->inhibit_lid_switch_fd = -1;
         manager->priv->inhibit_suspend_fd = -1;
+        manager->priv->inhibit_lid_switch_action = FALSE;
         manager->priv->screensaver_cancellable = g_cancellable_new ();
         manager->priv->bus_cancellable = g_cancellable_new ();
 }
