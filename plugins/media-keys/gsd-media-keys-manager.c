@@ -2334,6 +2334,34 @@ do_battery_action (GsdMediaKeysManager *manager)
                   label, g_variant_get_double (percentage));
         g_free (label);
 }
+static void
+do_screenshot_action (GsdMediaKeysManager *manager,
+                      MediaKeyType         type)
+{
+        if (!manager->priv->have_legacy_keygrabber)
+                gsd_screenshot_take (type);
+        else {
+                switch (type){
+                case SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot", FALSE);
+                        break;
+                case WINDOW_SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot --window", FALSE);
+                        break;
+                case AREA_SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot --area", FALSE);
+                        break;
+                case SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --clipboard", FALSE);
+                        break;
+                case WINDOW_SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --window --clipboard", FALSE);
+                        break;
+                case AREA_SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --area --clipboard", FALSE);
+                }
+        }
+}
 
 static void
 do_custom_action (GsdMediaKeysManager *manager,
@@ -2408,7 +2436,7 @@ do_action (GsdMediaKeysManager *manager,
         case WINDOW_SCREENSHOT_CLIP_KEY:
         case AREA_SCREENSHOT_KEY:
         case AREA_SCREENSHOT_CLIP_KEY:
-                gsd_screenshot_take (type);
+                do_screenshot_action (manager, type);
                 break;
         case TERMINAL_KEY:
                 do_terminal_action (manager);
