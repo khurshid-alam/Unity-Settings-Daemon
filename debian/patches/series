@@ -1,4 +1,3 @@
-fix_input_switching_on_unity.patch
 fix_screenshots_on_unity.patch
 git_keybindings_add_screen_reader_toggle.patch
 git_revert_gsd-keygrab.patch

@@ -25,6 +25,7 @@
 #include "gsd-keygrab.h"
 
 #define SETTINGS_BINDING_DIR "org.gnome.settings-daemon.plugins.media-keys"
+#define INPUT_SETTINGS_BINDING_DIR "org.gnome.desktop.wm.keybindings"
 
 typedef enum {
         TOUCHPAD_KEY,
@@ -87,6 +88,8 @@ typedef enum {
         KEYBOARD_BRIGHTNESS_DOWN_KEY,
         KEYBOARD_BRIGHTNESS_TOGGLE_KEY,
         BATTERY_KEY,
+        SWITCH_INPUT_SOURCE_KEY,
+        SWITCH_INPUT_SOURCE_BACKWARD_KEY,
         CUSTOM_KEY
 } MediaKeyType;
 
@@ -175,6 +178,9 @@ static struct {
         { KEYBOARD_BRIGHTNESS_DOWN_KEY, NULL, N_("Keyboard Brightness Down"), "XF86KbdBrightnessDown", SHELL_KEYBINDING_MODE_ALL },
         { KEYBOARD_BRIGHTNESS_TOGGLE_KEY, NULL, N_("Keyboard Brightness Toggle"), "XF86KbdLightOnOff", SHELL_KEYBINDING_MODE_ALL },
         { BATTERY_KEY, NULL, N_("Battery Status"), "XF86Battery", GSD_KEYBINDING_MODE_LAUNCHER },
+        { SWITCH_INPUT_SOURCE_KEY, "switch-input-source", NULL, NULL, SHELL_KEYBINDING_MODE_ALL },
+        { SWITCH_INPUT_SOURCE_BACKWARD_KEY, "switch-input-source-backward", NULL, NULL, SHELL_KEYBINDING_MODE_ALL }
+
 };
 
 #undef SCREENSAVER_MODE
