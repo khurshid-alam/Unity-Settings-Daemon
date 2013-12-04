@@ -48,22 +48,22 @@ plugin_in_files = 					\
 
 plugin_DATA = $(plugin_in_files:.gnome-settings-plugin.in=.gnome-settings-plugin)
 
-org.gnome.settings-daemon.plugins.power.policy.in: org.gnome.settings-daemon.plugins.power.policy.in.in Makefile
+com.ubuntu.unity-settings-daemon.plugins.power.policy.in: com.ubuntu.unity-settings-daemon.plugins.power.policy.in.in Makefile
 	$(AM_V_GEN) sed -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
 
 @INTLTOOL_POLICY_RULE@
 polkit_policydir = $(datadir)/polkit-1/actions
-polkit_policy_in_files = org.gnome.settings-daemon.plugins.power.policy.in
+polkit_policy_in_files = com.ubuntu.unity-settings-daemon.plugins.power.policy.in
 polkit_policy_DATA = $(polkit_policy_in_files:.policy.in=.policy)
 
 # so it always gets included in the tarball
-gsd_backlight_helper_SOURCES =				\
+usd_backlight_helper_SOURCES =				\
 	gsd-backlight-linux.c				\
 	gsd-backlight-linux.h				\
 	gsd-backlight-helper.c
 
-noinst_PROGRAMS = gsd-test-power
-gsd_test_power_SOURCES =				\
+noinst_PROGRAMS = usd-test-power
+usd_test_power_SOURCES =				\
 	gpm-common.c					\
 	gpm-common.h					\
 	gsd-backlight-linux.c				\
@@ -75,9 +75,9 @@ gsd_test_power_SOURCES =				\
 	gsm-manager-logout-mode.h			\
 	test-power.c
 
-gsd_test_power_CFLAGS = $(libpower_la_CFLAGS)
-gsd_test_power_CPPFLAGS = $(libpower_la_CPPFLAGS) -DGSD_MOCK=1 -DGSD_ACTION_DELAY=1
-gsd_test_power_LDADD =					\
+usd_test_power_CFLAGS = $(libpower_la_CFLAGS)
+usd_test_power_CPPFLAGS = $(libpower_la_CPPFLAGS) -DGSD_MOCK=1 -DGSD_ACTION_DELAY=1
+usd_test_power_LDADD =					\
 	-lm						\
 	$(top_builddir)/plugins/common/libcommon.la	\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la \
@@ -90,17 +90,17 @@ EXTRA_DIST = 						\
 	$(NULL)
 
 if HAVE_GUDEV
-libexec_PROGRAMS = gsd-backlight-helper
+libexec_PROGRAMS = usd-backlight-helper
 
-gsd_backlight_helper_LDFLAGS =				\
+usd_backlight_helper_LDFLAGS =				\
 	$(BACKLIGHT_HELPER_LIBS)			\
 	-lm
 
-gsd_backlight_helper_CFLAGS =				\
+usd_backlight_helper_CFLAGS =				\
 	$(BACKLIGHT_HELPER_CFLAGS)
 
 EXTRA_DIST += 						\
-	org.gnome.settings-daemon.plugins.power.policy.in.in
+	com.ubuntu.unity-settings-daemon.plugins.power.policy.in.in
 endif
 
 # Enums
@@ -141,7 +141,7 @@ gsd_power_enums_update_LDFLAGS = $(POWER_LIBS)
 
 EXTRA_DIST += gsd-power-constants-update.pl gsdpowerconstants.py gsdpowerenums.py test.py
 
-check-local: $(top_builddir)/tests/shiftkey gsd-test-power test.py gsdpowerconstants.py gsdpowerenums.py
+check-local: $(top_builddir)/tests/shiftkey usd-test-power test.py gsdpowerconstants.py gsdpowerenums.py
 # This is how you run a single test
 #	BUILDDIR=$(builddir) TOP_BUILDDIR=$(top_builddir) ${PYTHON} $(srcdir)/test.py PowerPluginTest.test_sleep_inactive_blank
 	BUILDDIR=$(builddir) TOP_BUILDDIR=$(top_builddir) ${PYTHON} $(srcdir)/test.py
@@ -153,7 +153,7 @@ CLEANFILES = 						\
 	$(plugin_DATA)					\
 	$(GSD_POWER_ENUM_FILES)				\
 	gsdpowerenums.py				\
-	org.gnome.settings-daemon.plugins.power.policy	\
-	org.gnome.settings-daemon.plugins.power.policy.in
+	com.ubuntu.unity-settings-daemon.plugins.power.policy	\
+	com.ubuntu.unity-settings-daemon.plugins.power.policy.in
 
 @GSD_INTLTOOL_PLUGIN_RULE@

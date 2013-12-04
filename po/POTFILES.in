@@ -1,6 +1,6 @@
 # Files with translatable strings.
 # Please keep this file in alphabetical order.
-data/gnome-settings-daemon.desktop.in.in
+data/unity-settings-daemon.desktop.in.in
 data/org.gnome.settings-daemon.peripherals.gschema.xml.in.in
 data/org.gnome.settings-daemon.peripherals.wacom.gschema.xml.in.in
 data/org.gnome.settings-daemon.plugins.color.gschema.xml.in.in
@@ -18,7 +18,7 @@ gnome-settings-daemon/main.c
 [type: gettext/ini]plugins/a11y-keyboard/a11y-keyboard.gnome-settings-plugin.in
 plugins/a11y-keyboard/gsd-a11y-keyboard-manager.c
 [type: gettext/ini]plugins/a11y-settings/a11y-settings.gnome-settings-plugin.in
-plugins/automount/gnome-fallback-mount-helper.desktop.in.in
+plugins/automount/unity-fallback-mount-helper.desktop.in.in
 plugins/automount/gsd-automount-manager.c
 plugins/automount/gsd-autorun.c
 [type: gettext/ini]plugins/background/background.gnome-settings-plugin.in
@@ -43,7 +43,7 @@ plugins/mouse/gsd-mouse-manager.c
 [type: gettext/ini]plugins/orientation/orientation.gnome-settings-plugin.in
 plugins/power/gpm-common.c
 plugins/power/gsd-power-manager.c
-plugins/power/org.gnome.settings-daemon.plugins.power.policy.in.in
+plugins/power/com.ubuntu.unity-settings-daemon.plugins.power.policy.in.in
 [type: gettext/ini]plugins/power/power.gnome-settings-plugin.in
 plugins/print-notifications/gsd-printer.c
 plugins/print-notifications/gsd-print-notifications-manager.c
@@ -59,7 +59,7 @@ plugins/updates/gsd-updates-manager.c
 [type: gettext/ini]plugins/updates/updates.gnome-settings-plugin.in
 plugins/wacom/gsd-wacom-device.c
 plugins/wacom/gsd-wacom-osd-window.c
-plugins/wacom/org.gnome.settings-daemon.plugins.wacom.policy.in.in
+plugins/wacom/com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in.in
 [type: gettext/ini]plugins/wacom/wacom.gnome-settings-plugin.in
 plugins/xrandr/gsd-xrandr-manager.c
 [type: gettext/ini]plugins/xrandr/xrandr.gnome-settings-plugin.in

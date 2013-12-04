@@ -30,14 +30,14 @@ stamp-h1
 .deps
 .libs
 gnome-settings-daemon/gnome-settings-client.h
-gnome-settings-daemon/gnome-settings-daemon
+gnome-settings-daemon/unity-settings-daemon
 gnome-settings-daemon/gnome-settings-manager-glue.h
 data/*.pc
 data/*.xml
 data/*.xml.in
 data/*.valid
-data/gnome-settings-daemon.desktop
-data/gnome-settings-daemon.desktop.in
+data/unity-settings-daemon.desktop
+data/unity-settings-daemon.desktop.in
 data/50-accessibility.xml
 data/org.freedesktop.IBus.service
 data/org.gnome.SettingsDaemon.service

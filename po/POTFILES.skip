@@ -6,7 +6,7 @@
 # Without these files, "make distcheck" fails.  Please do not
 # remove these unless you fix "make distcheck" a different way.
 #
-data/gnome-settings-daemon.desktop.in
+data/unity-settings-daemon.desktop.in
 data/org.gnome.settings-daemon.peripherals.gschema.xml.in
 data/org.gnome.settings-daemon.peripherals.wacom.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.color.gschema.xml.in
@@ -20,6 +20,6 @@ data/org.gnome.settings-daemon.plugins.print-notifications.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.updates.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.xrandr.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.xsettings.gschema.xml.in
-plugins/automount/gnome-fallback-mount-helper.desktop.in
-plugins/power/org.gnome.settings-daemon.plugins.power.policy.in
-plugins/wacom/org.gnome.settings-daemon.plugins.wacom.policy.in
+plugins/automount/unity-fallback-mount-helper.desktop.in
+plugins/power/com.ubuntu.unity-settings-daemon.plugins.power.policy.in
+plugins/wacom/com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in

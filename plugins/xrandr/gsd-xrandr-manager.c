@@ -69,8 +69,8 @@
  */
 #define CONFIRMATION_DIALOG_SECONDS 30
 
-/* name of the icon files (gsd-xrandr.svg, etc.) */
-#define GSD_XRANDR_ICON_NAME "gsd-xrandr"
+/* name of the icon files (usd-xrandr.svg, etc.) */
+#define GSD_XRANDR_ICON_NAME "usd-xrandr"
 
 #define GSD_XRANDR_DBUS_NAME GSD_DBUS_NAME ".XRANDR"
 #define GSD_XRANDR_DBUS_PATH GSD_DBUS_PATH "/XRANDR"

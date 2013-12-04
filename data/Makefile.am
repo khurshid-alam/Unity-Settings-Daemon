@@ -1,6 +1,6 @@
 NULL =
 
-apidir = $(includedir)/gnome-settings-daemon-$(GSD_API_VERSION)/gnome-settings-daemon
+apidir = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/unity-settings-daemon
 api_DATA = gsd-enums.h
 
 gsettings_ENUM_NAMESPACE = org.gnome.settings-daemon
@@ -30,28 +30,25 @@ convert_DATA = gnome-settings-daemon.convert
 
 @INTLTOOL_DESKTOP_RULE@
 desktopdir = $(sysconfdir)/xdg/autostart
-desktop_in_files = gnome-settings-daemon.desktop.in.in
+desktop_in_files = unity-settings-daemon.desktop.in.in
 desktop_DATA = $(desktop_in_files:.desktop.in.in=.desktop)
 
-gnome-settings-daemon.desktop.in: gnome-settings-daemon.desktop.in.in
+unity-settings-daemon.desktop.in: unity-settings-daemon.desktop.in.in
 	$(AM_V_GEN) sed -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@.tmp && mv $@.tmp $@
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = gnome-settings-daemon.pc
+pkgconfig_DATA = unity-settings-daemon.pc
 
 @INTLTOOL_XML_NOMERGE_RULE@
-
-man_MANS = gnome-settings-daemon.1
 
 dbusservice_in_files = org.freedesktop.IBus.service.in
 
 EXTRA_DIST = 					\
-	$(man_MANS)				\
 	$(convert_DATA)				\
 	$(gsettings_SCHEMAS:.xml=.xml.in.in)	\
 	$(desktop_in_files)			\
 	$(gsettings_ENUM_FILES)			\
-	gnome-settings-daemon.pc.in		\
+	unity-settings-daemon.pc.in		\
 	$(api_DATA)				\
 	$(dbusservice_in_files)			\
 	$(NULL)
@@ -59,7 +56,7 @@ EXTRA_DIST = 					\
 DISTCLEANFILES = 			\
 	$(gsettings_SCHEMAS)		\
 	$(desktop_DATA)			\
-	gnome-settings-daemon.desktop.in \
+	unity-settings-daemon.desktop.in \
 	$(NULL)
 
 MAINTAINERCLEANFILES =			\

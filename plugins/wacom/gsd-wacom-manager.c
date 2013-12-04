@@ -571,7 +571,7 @@ set_led (GsdWacomDevice       *device,
 	}
 	g_debug ("Switching group ID %d to index %d for device %s", button->group_id, index, path);
 
-	command = g_strdup_printf ("pkexec " LIBEXECDIR "/gsd-wacom-led-helper --path %s --group %d --led %d",
+	command = g_strdup_printf ("pkexec " LIBEXECDIR "/usd-wacom-led-helper --path %s --group %d --led %d",
 				   path, status_led, index - 1);
 	ret = g_spawn_command_line_sync (command,
 					 NULL,

@@ -1,8 +1,7 @@
 AC_PREREQ([2.60])
 
-AC_INIT([gnome-settings-daemon],
-        [3.8.6.1],
-        [http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-settings-daemon])
+AC_INIT([unity-settings-daemon],
+        [1.0])
 
 AC_CONFIG_SRCDIR([gnome-settings-daemon/gnome-settings-manager.c])
 
@@ -11,7 +10,7 @@ AM_MAINTAINER_MODE([enable])
 
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
-m4_define([gsd_api_version_major],[3])
+m4_define([gsd_api_version_major],[1])
 m4_define([gsd_api_version_minor],[0])
 m4_define([gsd_api_version],[gsd_api_version_major.gsd_api_version_minor])
 GSD_API_VERSION="gsd_api_version"
@@ -30,7 +29,7 @@ AC_CONFIG_HEADERS([config.h])
 
 IT_PROG_INTLTOOL([0.37.1])
 
-GETTEXT_PACKAGE=gnome-settings-daemon
+GETTEXT_PACKAGE=unity-settings-daemon
 AC_SUBST(GETTEXT_PACKAGE)
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE", [Name of default gettext domain])
 
@@ -76,11 +75,6 @@ PKG_CHECK_MODULES(SETTINGS_PLUGIN,
 )
 
 GSD_PLUGIN_LDFLAGS="-export_dynamic -module -avoid-version -no-undefined"
-case $host_os in
-  darwin*)
-    GSD_PLUGIN_LDFLAGS="${GSD_PLUGIN_LDFLAGS} -Wl,-bundle_loader,\$(top_builddir)/gnome-settings-daemon/gnome-settings-daemon"
-    ;;
-esac
 AC_SUBST([GSD_PLUGIN_LDFLAGS])
 
 AC_PATH_PROG(GLIB_GENMARSHAL, glib-genmarshal)
@@ -114,7 +108,7 @@ dnl ---------------------------------------------------------------------------
 PKG_CHECK_MODULES(LIBNOTIFY, libnotify >= $LIBNOTIFY_REQUIRED_VERSION,
 		  [have_libnotify=yes], have_libnotify=no)
 if test "x$have_libnotify" = xno ; then
-	AC_MSG_ERROR([libnotify is required to build gnome-settings-daemon])
+	AC_MSG_ERROR([libnotify is required to build unity-settings-daemon])
 fi
 AC_SUBST(LIBNOTIFY_CFLAGS)
 AC_SUBST(LIBNOTIFY_LIBS)
@@ -413,7 +407,7 @@ fi
 # Plugins
 # ---------------------------------------------------------------------------
 
-plugindir='$(libdir)/gnome-settings-daemon-gsd_api_version'
+plugindir='$(libdir)/unity-settings-daemon-gsd_api_version'
 AC_SUBST([plugindir])
 
 PLUGIN_CFLAGS="-DG_LOG_DOMAIN=\"\\\"\$(plugin_name)-plugin\\\"\" -DPLUGIN_NAME=\"\\\"\$(plugin_name)\\\"\" "
@@ -525,8 +519,8 @@ plugins/wacom/Makefile
 plugins/xrandr/Makefile
 plugins/xsettings/Makefile
 data/Makefile
-data/gnome-settings-daemon.pc
-data/gnome-settings-daemon-uninstalled.pc
+data/unity-settings-daemon.pc
+data/unity-settings-daemon-uninstalled.pc
 data/org.gnome.settings-daemon.plugins.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.xsettings.gschema.xml.in
 data/org.gnome.settings-daemon.plugins.keyboard.gschema.xml.in
@@ -550,7 +544,7 @@ dnl - Show summary
 dnl ---------------------------------------------------------------------------
 
 echo "
-                    gnome-settings-daemon $VERSION
+                    untiy-settings-daemon $VERSION
                     =============================
 
         prefix:                   ${prefix}

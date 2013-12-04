@@ -28,14 +28,14 @@ libcursor_la_LIBADD  =					\
 	$(CURSOR_LIBS)					\
 	$(SETTINGS_PLUGIN_LIBS)
 
-libexec_PROGRAMS = gsd-test-cursor
+libexec_PROGRAMS = usd-test-cursor
 
-gsd_test_cursor_SOURCES =		\
+usd_test_cursor_SOURCES =		\
 	test-cursor.c			\
 	gsd-cursor-manager.c		\
 	gsd-cursor-manager.h
 
-gsd_test_cursor_CPPFLAGS =					\
+usd_test_cursor_CPPFLAGS =					\
 	-I$(top_srcdir)/data/					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
@@ -43,13 +43,13 @@ gsd_test_cursor_CPPFLAGS =					\
 	-DLIBEXECDIR=\""$(libexecdir)"\"			\
 	$(AM_CPPFLAGS)
 
-gsd_test_cursor_CFLAGS =			\
+usd_test_cursor_CFLAGS =			\
 	$(PLUGIN_CFLAGS)		\
 	$(SETTINGS_PLUGIN_CFLAGS)	\
 	$(CURSOR_CFLAGS)		\
 	$(AM_CFLAGS)
 
-gsd_test_cursor_LDADD =						\
+usd_test_cursor_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(SETTINGS_DAEMON_LIBS)			\

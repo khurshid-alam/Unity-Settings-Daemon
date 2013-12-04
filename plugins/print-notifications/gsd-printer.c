@@ -1228,7 +1228,7 @@ client_signal_handler (GDBusConnection  *connection,
 
                 if (g_strcmp0 (signal_name, "EndSession") == 0) {
                         g_main_loop_quit (main_loop);
-                        g_debug ("Exiting gsd-printer");
+                        g_debug ("Exiting usd-printer");
                 }
         }
 }
@@ -1336,7 +1336,7 @@ main (int argc, char *argv[])
                                         NULL,
                                         NULL);
 
-  object_path = register_gnome_session_client ("gsd-printer", "");
+  object_path = register_gnome_session_client ("usd-printer", "");
   if (object_path) {
           client_signal_subscription_id =
                   g_dbus_connection_signal_subscribe (connection,

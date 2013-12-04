@@ -1001,7 +1001,7 @@ scp_handler (GsdPrintNotificationsManager *manager,
                 if (manager->priv->scp_handler_spawned)
                         return;
 
-                args[0] = LIBEXECDIR "/gsd-printer";
+                args[0] = LIBEXECDIR "/usd-printer";
                 args[1] = NULL;
 
                 g_spawn_async (NULL, args, NULL,

@@ -71,9 +71,9 @@ plugin_in_files = 		\
 
 plugin_DATA = $(plugin_in_files:.gnome-settings-plugin.in=.gnome-settings-plugin)
 
-libexec_PROGRAMS = gsd-test-media-keys
+libexec_PROGRAMS = usd-test-media-keys
 
-gsd_test_media_keys_SOURCES =			\
+usd_test_media_keys_SOURCES =			\
 	gsd-media-keys-manager.c		\
 	gsd-media-keys-manager.h		\
 	gsd-screenshot-utils.h			\
@@ -82,7 +82,7 @@ gsd_test_media_keys_SOURCES =			\
 	$(BUILT_SOURCES)			\
 	$(NULL)
 
-gsd_test_media_keys_CPPFLAGS = \
+usd_test_media_keys_CPPFLAGS = \
 	-I$(top_srcdir)/data/					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
@@ -93,13 +93,13 @@ gsd_test_media_keys_CPPFLAGS = \
 	-DGNOME_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\"	\
 	$(AM_CPPFLAGS)
 
-gsd_test_media_keys_CFLAGS = \
+usd_test_media_keys_CFLAGS = \
 	$(PLUGIN_CFLAGS)		\
 	$(SETTINGS_PLUGIN_CFLAGS)	\
 	$(MEDIA_KEYS_CFLAGS)		\
 	$(AM_CFLAGS)
 
-gsd_test_media_keys_LDADD = \
+usd_test_media_keys_LDADD = \
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(top_builddir)/plugins/media-keys/gvc/libgvc.la	\

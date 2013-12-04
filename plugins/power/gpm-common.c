@@ -1288,7 +1288,7 @@ backlight_helper_get_value (const gchar *argument, GError **error)
 #endif
 
         /* get the data */
-        command = g_strdup_printf (LIBEXECDIR "/gsd-backlight-helper --%s",
+        command = g_strdup_printf (LIBEXECDIR "/usd-backlight-helper --%s",
                                    argument);
         ret = g_spawn_command_line_sync (command,
                                          &stdout_data,
@@ -1304,7 +1304,7 @@ backlight_helper_get_value (const gchar *argument, GError **error)
                  g_set_error (error,
                              GSD_POWER_MANAGER_ERROR,
                              GSD_POWER_MANAGER_ERROR_FAILED,
-                             "gsd-backlight-helper failed: %s",
+                             "usd-backlight-helper failed: %s",
                              stdout_data ? stdout_data : "No reason");
                 goto out;
         }
@@ -1381,7 +1381,7 @@ backlight_helper_set_value (const gchar *argument,
 #endif
 
         /* get the data */
-        command = g_strdup_printf ("pkexec " LIBEXECDIR "/gsd-backlight-helper --%s %i",
+        command = g_strdup_printf ("pkexec " LIBEXECDIR "/usd-backlight-helper --%s %i",
                                    argument, value);
         ret = g_spawn_command_line_sync (command,
                                          NULL,

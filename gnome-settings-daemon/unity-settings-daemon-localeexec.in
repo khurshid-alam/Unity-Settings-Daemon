@@ -17,4 +17,4 @@ if [ -x @prefix@/bin/ibus-daemon ]; then
   export XMODIFIERS=@im=ibus
 fi
 
-exec @libexecdir@/gnome-settings-daemon
+exec @libexecdir@/unity-settings-daemon

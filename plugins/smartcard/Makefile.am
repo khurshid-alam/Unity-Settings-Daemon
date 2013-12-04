@@ -1,15 +1,15 @@
 plugin_name = smartcard
 
-libexec_PROGRAMS = gsd-test-smartcard
+libexec_PROGRAMS = usd-test-smartcard
 
-gsd_test_smartcard_SOURCES =	\
+usd_test_smartcard_SOURCES =	\
 	gsd-smartcard-manager.h	\
 	gsd-smartcard-manager.c	\
 	gsd-smartcard.h         \
 	gsd-smartcard.c         \
 	test-smartcard.c
 
-gsd_test_smartcard_CFLAGS =					\
+usd_test_smartcard_CFLAGS =					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
@@ -20,7 +20,7 @@ gsd_test_smartcard_CFLAGS =					\
 	$(SETTINGS_PLUGIN_CFLAGS)				\
 	$(AM_CFLAGS)
 
-gsd_test_smartcard_LDADD =					\
+usd_test_smartcard_LDADD =					\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(NSS_LIBS)						\

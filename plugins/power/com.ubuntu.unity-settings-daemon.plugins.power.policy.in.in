@@ -5,26 +5,27 @@
 <policyconfig>
 
   <!--
-    Policy definitions for gnome-settings-daemon system-wide actions.
+    Policy definitions for unity-settings-daemon system-wide actions.
+    Copyright (c) 2010-2011 Richard Hughes <richard@hughsie.com>
   -->
 
-  <vendor>GNOME Settings Daemon</vendor>
+  <vendor>Unity Settings Daemon</vendor>
   <vendor_url>http://git.gnome.org/browse/gnome-settings-daemon</vendor_url>
-  <icon_name>input-tablet</icon_name>
+  <icon_name>battery</icon_name>
 
-  <action id="org.gnome.settings-daemon.plugins.wacom.wacom-led-helper">
+  <action id="com.ubuntu.unity-settings-daemon.plugins.power.backlight-helper">
     <!-- SECURITY:
           - A normal active user on the local machine does not need permission
-            to change the LED setting for a Wacom tablet
+            to change the backlight brightness.
      -->
-    <_description>Modify the lit LED for a Wacom tablet</_description>
-    <_message>Authentication is required to modify the lit LED for a Wacom tablet</_message>
+    <_description>Modify the laptop brightness</_description>
+    <_message>Authentication is required to modify the laptop brightness</_message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">@libexecdir@/gsd-wacom-led-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">@libexecdir@/usd-backlight-helper</annotate>
   </action>
 
 </policyconfig>

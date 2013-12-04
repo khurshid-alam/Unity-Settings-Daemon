@@ -7,13 +7,13 @@ USE_GNOME2_MACROS=1
 srcdir=`dirname $0`
 test -z "$srcdir" && srcdir=.
 
-PKG_NAME="gnome-settings-daemon"
+PKG_NAME="unity-settings-daemon"
 
 (test -f $srcdir/configure.ac \
   && test -d $srcdir/gnome-settings-daemon \
   && test -f $srcdir/gnome-settings-daemon/gnome-settings-manager.h) || {
     echo -n "**Error**: Directory "\`$srcdir\'" does not look like the"
-    echo " top-level gnome-settings-daemon directory"
+    echo " top-level unity-settings-daemon directory"
     exit 1
 }
 

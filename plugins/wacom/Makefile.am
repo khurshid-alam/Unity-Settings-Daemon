@@ -34,7 +34,7 @@ libgsdwacom_la_LIBADD  =						\
 	$(SETTINGS_PLUGIN_LIBS)						\
 	$(WACOM_LIBS)
 
-org.gnome.settings-daemon.plugins.wacom.policy.in: org.gnome.settings-daemon.plugins.wacom.policy.in.in Makefile
+com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in: com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in.in Makefile
 	$(AM_V_GEN) sed -e "s|\@libexecdir\@|$(libexecdir)|" $< > $@
 
 gsd-wacom-resources.c: wacom.gresource.xml tablet-layout.css
@@ -47,32 +47,32 @@ gsd-wacom-resources.c: wacom.gresource.xml tablet-layout.css
 
 @INTLTOOL_POLICY_RULE@
 polkit_policydir = $(datadir)/polkit-1/actions
-polkit_policy_in_files = org.gnome.settings-daemon.plugins.wacom.policy.in
+polkit_policy_in_files = com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in
 polkit_policy_DATA = $(polkit_policy_in_files:.policy.in=.policy)
 
 # so it always gets included in the tarball
-gsd_wacom_led_helper_SOURCES =	gsd-wacom-led-helper.c
+usd_wacom_led_helper_SOURCES =	gsd-wacom-led-helper.c
 
-EXTRA_DIST = $(gsd_wacom_led_helper_SOURCES) wacom.gresource.xml tablet-layout.css
+EXTRA_DIST = $(usd_wacom_led_helper_SOURCES) wacom.gresource.xml tablet-layout.css
 
 if HAVE_GUDEV
-libexec_PROGRAMS = gsd-wacom-led-helper
+libexec_PROGRAMS = usd-wacom-led-helper
 
-gsd_wacom_led_helper_LDFLAGS =				\
+usd_wacom_led_helper_LDFLAGS =				\
 	$(BACKLIGHT_HELPER_LIBS)			\
 	-lm
 
-gsd_wacom_led_helper_CFLAGS =				\
+usd_wacom_led_helper_CFLAGS =				\
 	$(BACKLIGHT_HELPER_CFLAGS)
 else
 libexec_PROGRAMS =
 endif
 
-EXTRA_DIST += org.gnome.settings-daemon.plugins.wacom.policy.in.in
+EXTRA_DIST += com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in.in
 
-libexec_PROGRAMS += gsd-test-wacom gsd-list-wacom gsd-test-wacom-osd
+libexec_PROGRAMS += usd-test-wacom usd-list-wacom usd-test-wacom-osd
 
-gsd_test_wacom_SOURCES =	\
+usd_test_wacom_SOURCES =	\
 	test-wacom.c		\
 	gsd-wacom-manager.c	\
 	gsd-wacom-manager.h	\
@@ -82,7 +82,7 @@ gsd_test_wacom_SOURCES =	\
 	gsd-wacom-device.h	\
 	gsd-wacom-resources.c
 
-gsd_test_wacom_CPPFLAGS = \
+usd_test_wacom_CPPFLAGS = \
 	-I$(top_srcdir)/data/					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
@@ -94,13 +94,13 @@ gsd_test_wacom_CPPFLAGS = \
 	-DSCHEMA_NAME=\""gsdwacom"\"				\
 	$(AM_CPPFLAGS)
 
-gsd_test_wacom_CFLAGS =			\
+usd_test_wacom_CFLAGS =			\
 	$(PLUGIN_CFLAGS)		\
 	$(SETTINGS_PLUGIN_CFLAGS)	\
 	$(WACOM_CFLAGS)			\
 	$(AM_CFLAGS)
 
-gsd_test_wacom_LDADD =						\
+usd_test_wacom_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
@@ -108,12 +108,12 @@ gsd_test_wacom_LDADD =						\
 	$(WACOM_LIBS)						\
 	-lm
 
-gsd_list_wacom_SOURCES =	\
+usd_list_wacom_SOURCES =	\
 	list-wacom.c		\
 	gsd-wacom-device.c	\
 	gsd-wacom-device.h
 
-gsd_list_wacom_CPPFLAGS =					\
+usd_list_wacom_CPPFLAGS =					\
 	-I$(top_srcdir)/data/					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
@@ -123,12 +123,12 @@ gsd_list_wacom_CPPFLAGS =					\
 	-DGNOME_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\"	\
 	$(AM_CPPFLAGS)
 
-gsd_list_wacom_CFLAGS =			\
+usd_list_wacom_CFLAGS =			\
 	$(SETTINGS_PLUGIN_CFLAGS)	\
 	$(WACOM_CFLAGS)			\
 	$(AM_CFLAGS)
 
-gsd_list_wacom_LDADD =						\
+usd_list_wacom_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
@@ -136,7 +136,7 @@ gsd_list_wacom_LDADD =						\
 	$(WACOM_LIBS)						\
 	-lm
 
-gsd_test_wacom_osd_SOURCES =					\
+usd_test_wacom_osd_SOURCES =					\
 	test-osd-window.c					\
 	gsd-wacom-osd-window.h					\
 	gsd-wacom-osd-window.c					\
@@ -144,7 +144,7 @@ gsd_test_wacom_osd_SOURCES =					\
 	gsd-wacom-device.h					\
 	gsd-wacom-resources.c
 
-gsd_test_wacom_osd_CPPFLAGS = \
+usd_test_wacom_osd_CPPFLAGS = \
 	-I$(top_srcdir)/data/					\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
@@ -155,12 +155,12 @@ gsd_test_wacom_osd_CPPFLAGS = \
 	-DLIBEXECDIR=\""$(libexecdir)"\"			\
 	$(AM_CPPFLAGS)
 
-gsd_test_wacom_osd_CFLAGS =					\
+usd_test_wacom_osd_CFLAGS =					\
 	$(SETTINGS_PLUGIN_CFLAGS)				\
 	$(WACOM_CFLAGS)						\
 	$(AM_CFLAGS)
 
-gsd_test_wacom_osd_LDADD = \
+usd_test_wacom_osd_LDADD = \
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
@@ -176,7 +176,7 @@ EXTRA_DIST += $(plugin_in_files) README.config-storage
 CLEANFILES =						\
 	$(plugin_DATA)					\
 	gsd-wacom-resources.c				\
-	org.gnome.settings-daemon.plugins.wacom.policy	\
-	org.gnome.settings-daemon.plugins.wacom.policy.in
+	com.ubuntu.unity-settings-daemon.plugins.wacom.policy	\
+	com.ubuntu.unity-settings-daemon.plugins.wacom.policy.in
 
 @GSD_INTLTOOL_PLUGIN_RULE@

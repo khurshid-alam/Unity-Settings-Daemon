@@ -1,13 +1,13 @@
 plugin_name = sound
 
-libexec_PROGRAMS = gsd-test-sound
+libexec_PROGRAMS = usd-test-sound
 
-gsd_test_sound_SOURCES =	\
+usd_test_sound_SOURCES =	\
 	gsd-sound-manager.h	\
 	gsd-sound-manager.c	\
 	test-sound.c
 
-gsd_test_sound_CFLAGS =						\
+usd_test_sound_CFLAGS =						\
 	-I$(top_srcdir)/gnome-settings-daemon			\
 	-I$(top_srcdir)/plugins/common				\
 	-DGNOME_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\"	\
@@ -16,7 +16,7 @@ gsd_test_sound_CFLAGS =						\
 	$(SETTINGS_PLUGIN_CFLAGS)				\
 	$(AM_CFLAGS)
 
-gsd_test_sound_LDADD =						\
+usd_test_sound_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
 	$(SOUND_LIBS)						\

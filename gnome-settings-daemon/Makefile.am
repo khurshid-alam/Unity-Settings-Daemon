@@ -46,22 +46,22 @@ libgsd_la_LDFLAGS =		\
 gsddir = $(libexecdir)
 
 gsd_PROGRAMS = \
-	gnome-settings-daemon
+	unity-settings-daemon
 
 gsd_SCRIPTS = \
-	gnome-settings-daemon-localeexec
+	unity-settings-daemon-localeexec
 
 EXTRA_DIST = \
-	gnome-settings-daemon-localeexec.in
+	unity-settings-daemon-localeexec.in
 
-gnome-settings-daemon-localeexec: gnome-settings-daemon-localeexec.in
+unity-settings-daemon-localeexec: unity-settings-daemon-localeexec.in
 	$(AM_V_GEN) sed -e "s|\@libexecdir\@|$(libexecdir)|" -e "s|\@prefix\@|$(prefix)|"  $< > $@.tmp && mv $@.tmp $@
 
-apidir   = $(includedir)/gnome-settings-daemon-$(GSD_API_VERSION)/gnome-settings-daemon
+apidir   = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/unity-settings-daemon
 api_DATA = 				\
 	gnome-settings-plugin.h
 
-gnome_settings_daemon_SOURCES =		\
+unity_settings_daemon_SOURCES =		\
 	main.c				\
 	gnome-settings-manager.c	\
 	gnome-settings-manager.h	\
@@ -73,16 +73,16 @@ gnome_settings_daemon_SOURCES =		\
 	gnome-settings-module.h		\
 	$(NULL)
 
-gnome_settings_daemon_CPPFLAGS = \
+unity_settings_daemon_CPPFLAGS = \
 	$(AM_CPPFLAGS)
 
-gnome_settings_daemon_CFLAGS = 		\
+unity_settings_daemon_CFLAGS = 		\
 	$(AM_CFLAGS)
 
-gnome_settings_daemon_LDFLAGS = 	\
+unity_settings_daemon_LDFLAGS = 	\
 	$(AM_LDFLAGS)
 
-gnome_settings_daemon_LDADD = 		\
+unity_settings_daemon_LDADD = 		\
 	libgsd.la		\
 	$(SETTINGS_DAEMON_LIBS)		\
 	$(LIBNOTIFY_LIBS)		\

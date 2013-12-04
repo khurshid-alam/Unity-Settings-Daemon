@@ -26,9 +26,9 @@ test_gtk_modules_CPPFLAGS =				\
 	-DGTK_MODULES_DIRECTORY=\""$(libdir)/gnome-settings-daemon-@GSD_API_VERSION@/gtk-modules/"\" \
 	$(AM_CPPFLAGS)
 
-libexec_PROGRAMS = gsd-test-xsettings
+libexec_PROGRAMS = usd-test-xsettings
 
-gsd_test_xsettings_SOURCES =	\
+usd_test_xsettings_SOURCES =	\
 	gsd-xsettings-gtk.c	\
 	gsd-xsettings-gtk.h	\
 	gsd-xsettings-manager.c	\
@@ -41,9 +41,9 @@ gsd_test_xsettings_SOURCES =	\
 	fontconfig-monitor.h	\
 	test-xsettings.c
 
-gsd_test_xsettings_CFLAGS = $(test_gtk_modules_CFLAGS)
-gsd_test_xsettings_CPPFLAGS = $(test_gtk_modules_CPPFLAGS) -I$(top_srcdir)/plugins/common
-gsd_test_xsettings_LDADD = $(test_gtk_modules_LDADD)
+usd_test_xsettings_CFLAGS = $(test_gtk_modules_CFLAGS)
+usd_test_xsettings_CPPFLAGS = $(test_gtk_modules_CPPFLAGS) -I$(top_srcdir)/plugins/common
+usd_test_xsettings_LDADD = $(test_gtk_modules_LDADD)
 
 plugin_LTLIBRARIES = \
 	libxsettings.la		\
