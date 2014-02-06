@@ -41,8 +41,6 @@ pkgconfig_DATA = unity-settings-daemon.pc
 
 @INTLTOOL_XML_NOMERGE_RULE@
 
-dbusservice_in_files = org.freedesktop.IBus.service.in
-
 EXTRA_DIST = 					\
 	$(convert_DATA)				\
 	$(gsettings_SCHEMAS:.xml=.xml.in.in)	\
@@ -50,7 +48,6 @@ EXTRA_DIST = 					\
 	$(gsettings_ENUM_FILES)			\
 	unity-settings-daemon.pc.in		\
 	$(api_DATA)				\
-	$(dbusservice_in_files)			\
 	$(NULL)
 
 DISTCLEANFILES = 			\
@@ -63,13 +60,3 @@ MAINTAINERCLEANFILES =			\
 	*~				\
 	Makefile.in			\
 	$(gsettings_SCHEMAS:.xml=.valid)
-
-if HAVE_IBUS
-dbusservicedir=${datadir}/dbus-1/services
-dbusservice_DATA = $(dbusservice_in_files:.service.in=.service)
-
-org.freedesktop.IBus.service: org.freedesktop.IBus.service.in
-	$(AM_V_GEN) sed -e "s|\@bindir\@|$(bindir)|" $< > $@.tmp && mv $@.tmp $@
-
-CLEANFILES = $(dbusservice_DATA)
-endif
