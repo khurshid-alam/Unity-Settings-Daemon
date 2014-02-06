@@ -3,8 +3,6 @@ usr/lib/unity-settings-daemon*
 usr/share/icons
 usr/share/locale
 usr/share/unity-settings-daemon
-#usr/share/GConf
-#usr/share/glib-2.0
 usr/share/polkit-1
 debian/source_unity-settings-daemon.py /usr/share/apport/package-hooks
 

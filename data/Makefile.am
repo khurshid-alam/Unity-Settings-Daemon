@@ -3,30 +3,9 @@ NULL =
 apidir = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/unity-settings-daemon
 api_DATA = gsd-enums.h
 
-gsettings_ENUM_NAMESPACE = org.gnome.settings-daemon
-gsettings_ENUM_FILES = $(top_srcdir)/data/$(api_DATA)
-
-gsettings_SCHEMAS =							\
-	org.gnome.settings-daemon.peripherals.gschema.xml		\
-	org.gnome.settings-daemon.plugins.gschema.xml			\
-	org.gnome.settings-daemon.plugins.keyboard.gschema.xml		\
-	org.gnome.settings-daemon.plugins.power.gschema.xml		\
-	org.gnome.settings-daemon.plugins.color.gschema.xml		\
-	org.gnome.settings-daemon.plugins.media-keys.gschema.xml	\
-	org.gnome.settings-daemon.plugins.xsettings.gschema.xml		\
-	org.gnome.settings-daemon.plugins.housekeeping.gschema.xml	\
-	org.gnome.settings-daemon.plugins.print-notifications.gschema.xml	\
-	org.gnome.settings-daemon.plugins.xrandr.gschema.xml		\
-	org.gnome.settings-daemon.plugins.updates.gschema.xml		\
-	org.gnome.settings-daemon.plugins.orientation.gschema.xml	\
-	org.gnome.settings-daemon.peripherals.wacom.gschema.xml
-
 @INTLTOOL_XML_NOMERGE_RULE@
 
 @GSETTINGS_RULES@
-
-convertdir = $(datadir)/GConf/gsettings
-convert_DATA = gnome-settings-daemon.convert
 
 @INTLTOOL_DESKTOP_RULE@
 desktopdir = $(sysconfdir)/xdg/autostart
@@ -43,7 +22,6 @@ pkgconfig_DATA = unity-settings-daemon.pc
 
 EXTRA_DIST = 					\
 	$(convert_DATA)				\
-	$(gsettings_SCHEMAS:.xml=.xml.in.in)	\
 	$(desktop_in_files)			\
 	$(gsettings_ENUM_FILES)			\
 	unity-settings-daemon.pc.in		\
@@ -51,12 +29,10 @@ EXTRA_DIST = 					\
 	$(NULL)
 
 DISTCLEANFILES = 			\
-	$(gsettings_SCHEMAS)		\
 	$(desktop_DATA)			\
 	unity-settings-daemon.desktop.in \
 	$(NULL)
 
 MAINTAINERCLEANFILES =			\
 	*~				\
-	Makefile.in			\
-	$(gsettings_SCHEMAS:.xml=.valid)
+	Makefile.in
