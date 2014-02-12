@@ -64,6 +64,8 @@
 
 #include <libnotify/notify.h>
 
+#include <X11/XKBlib.h>
+
 #define GSD_MEDIA_KEYS_DBUS_PATH GSD_DBUS_PATH "/MediaKeys"
 #define GSD_MEDIA_KEYS_DBUS_NAME GSD_DBUS_NAME ".MediaKeys"
 
@@ -483,7 +485,7 @@ static char *
 get_key_string (GsdMediaKeysManager *manager,
 		MediaKey            *key)
 {
-        if (key->settings_key == "switch-input-source" || key->settings_key == "switch-input-source-backward")
+        if (g_strcmp0 (key->settings_key, "switch-input-source") == 0 || g_strcmp0 (key->settings_key, "switch-input-source-backward") == 0)
 	        return g_settings_get_strv (manager->priv->input_settings, key->settings_key)[0];
         else if (key->settings_key != NULL)
 		return g_settings_get_string (manager->priv->settings, key->settings_key);
@@ -693,7 +695,6 @@ ungrab_accelerator_complete (GObject      *object,
                              GAsyncResult *result,
                              gpointer      user_data)
 {
-	GsdMediaKeysManager *manager = user_data;
 	shell_key_grabber_call_ungrab_accelerator_finish (SHELL_KEY_GRABBER (object),
 	                                                  NULL, result, NULL);
 }
@@ -1984,6 +1985,8 @@ do_config_power_action (GsdMediaKeysManager *manager,
                 /* these actions cannot be handled by media-keys and
                  * are not used in this context */
                 break;
+        default:
+                break;
         }
 
 }
@@ -2016,6 +2019,8 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
                 i = 0;
 
         g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
+
+        XkbLockModifiers (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), XkbUseCoreKbd, LockMask, 0);
 
  out:
         g_variant_unref (sources);
@@ -2226,6 +2231,9 @@ do_screenshot_action (GsdMediaKeysManager *manager,
                 break;
         case AREA_SCREENSHOT_CLIP_KEY:
                 execute (manager, "gnome-screenshot --area --clipboard", FALSE);
+                break;
+        default:
+                break;
         }
 }
 
