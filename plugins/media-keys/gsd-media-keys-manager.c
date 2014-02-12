@@ -2565,8 +2565,6 @@ filter_key_events (XEvent              *xevent,
                    GdkEvent            *event,
                    GsdMediaKeysManager *manager)
 {
-    static gboolean ok_to_switch = TRUE;
-
     XIEvent             *xiev;
     XIDeviceEvent       *xev;
     XGenericEventCookie *cookie;
@@ -2589,9 +2587,6 @@ filter_key_events (XEvent              *xevent,
     xev = (XIDeviceEvent *) xiev;
 
     deviceid = xev->sourceid;
-
-    if (xiev->evtype == XI_KeyPress)
-        ok_to_switch = TRUE;
 
         for (i = 0; i < manager->priv->keys->len; i++) {
                 MediaKey *key;
@@ -2623,15 +2618,6 @@ filter_key_events (XEvent              *xevent,
                         if (key->key_type == CUSTOM_KEY) {
                                 do_custom_action (manager, deviceid, key, xev->time);
                                 return GDK_FILTER_REMOVE;
-                        }
-
-                        if (key->key_type == SWITCH_INPUT_SOURCE_KEY || key->key_type == SWITCH_INPUT_SOURCE_BACKWARD_KEY) {
-                                if (ok_to_switch) {
-                                        do_action (manager, deviceid, key->key_type, xev->time);
-                                        ok_to_switch = FALSE;
-                                }
-
-                                return GDK_FILTER_CONTINUE;
                         }
 
                         if (do_action (manager, deviceid, key->key_type, xev->time) == FALSE) {
