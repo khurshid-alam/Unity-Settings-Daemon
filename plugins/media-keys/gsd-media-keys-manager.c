@@ -741,8 +741,8 @@ grab_media_key (MediaKey            *key,
 }
 
 static gboolean
-grab_media_key_unity (MediaKey            *key,
-                      GsdMediaKeysManager *manager)
+grab_media_key_legacy (MediaKey            *key,
+                       GsdMediaKeysManager *manager)
 {
     char *tmp;
     gboolean need_flush;
@@ -832,7 +832,7 @@ gsettings_changed_cb (GSettings           *settings,
                         if (!manager->priv->have_legacy_keygrabber)
                             grab_media_key (key, manager);
                         else {
-                            if (grab_media_key_unity (key, manager))
+                            if (grab_media_key_legacy (key, manager))
                                 need_flush = TRUE;
                         }
                         break;
@@ -997,7 +997,7 @@ add_key (GsdMediaKeysManager *manager, guint i)
 	g_ptr_array_add (manager->priv->keys, key);
 
     if (manager->priv->have_legacy_keygrabber)
-        grab_media_key_unity (key, manager);
+        grab_media_key_legacy (key, manager);
 }
 
 static void
@@ -1038,7 +1038,7 @@ init_kbd (GsdMediaKeysManager *manager)
                 g_ptr_array_add (manager->priv->keys, key);
 
                 if (manager->priv->have_legacy_keygrabber)
-                        grab_media_key_unity (key, manager);
+                        grab_media_key_legacy (key, manager);
         }
         g_strfreev (custom_paths);
 
@@ -2123,8 +2123,9 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
         GVariant *sources;
         gint i, n;
 
-        if (!manager->priv->have_legacy_keygrabber)
-                return;
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "ubuntu") != 0)
+                if (!manager->priv->have_legacy_keygrabber)
+                        return;
 
         settings = g_settings_new (GNOME_DESKTOP_INPUT_SOURCES_DIR);
         sources = g_settings_get_value (settings, KEY_INPUT_SOURCES);
@@ -2755,13 +2756,20 @@ on_key_grabber_ready (GObject      *source,
         init_kbd (manager);
 }
 
+static gboolean
+session_has_key_grabber (void)
+{
+        const gchar *session = g_getenv ("DESKTOP_SESSION");
+        return g_strcmp0 (session, "gnome") == 0 || g_strcmp0 (session, "ubuntu") == 0;
+}
+
 static void
 on_shell_appeared (GDBusConnection   *connection,
                    const char        *name,
                    const char        *name_owner,
                    gpointer           user_data)
 {
-        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") != 0)
+        if (!session_has_key_grabber ())
                 return;
 
         GsdMediaKeysManager *manager = user_data;
@@ -2787,7 +2795,7 @@ on_shell_vanished (GDBusConnection  *connection,
                    const char       *name,
                    gpointer          user_data)
 {
-        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") != 0)
+        if (!session_has_key_grabber ())
                 return;
 
         GsdMediaKeysManager *manager = user_data;
@@ -2807,7 +2815,7 @@ start_legacy_grabber (GDBusConnection   *connection,
         GsdMediaKeysManager *manager = user_data;
         GSList *l;
 
-        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") == 0)
+        if (session_has_key_grabber ())
                 return;
 
         manager->priv->have_legacy_keygrabber = TRUE;
@@ -2844,7 +2852,7 @@ stop_legacy_grabber (GDBusConnection  *connection,
 {
         GsdMediaKeysManager *manager = user_data;
 
-        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") == 0)
+        if (session_has_key_grabber ())
                 return;
 
         manager->priv->have_legacy_keygrabber = FALSE;
