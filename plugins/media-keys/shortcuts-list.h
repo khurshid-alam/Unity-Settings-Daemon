@@ -22,6 +22,7 @@
 #define __SHORTCUTS_LIST_H__
 
 #include "shell-keybinding-modes.h"
+#include "gsd-keygrab.h"
 
 #define SETTINGS_BINDING_DIR "org.gnome.settings-daemon.plugins.media-keys"
 #define INPUT_SETTINGS_BINDING_DIR "org.gnome.desktop.wm.keybindings"

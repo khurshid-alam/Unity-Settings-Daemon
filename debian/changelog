@@ -1,9 +1,3 @@
-unity-settings-daemon (14.04.0-0ubuntu2) UNRELEASED; urgency=medium
-
-  * Revert the legacy key grabber.
-
- -- William Hua <william.hua@canonical.com>  Fri, 14 Feb 2014 10:23:45 -0500
-
 unity-settings-daemon (14.04.0-0ubuntu1) trusty; urgency=low
 
   * Fork gnome-settings-daemon so we can maintain it for Unity 7 until it is

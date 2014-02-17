@@ -64,8 +64,6 @@
 
 #include <libnotify/notify.h>
 
-#include <X11/XKBlib.h>
-
 #define GSD_MEDIA_KEYS_DBUS_PATH GSD_DBUS_PATH "/MediaKeys"
 #define GSD_MEDIA_KEYS_DBUS_NAME GSD_DBUS_NAME ".MediaKeys"
 
@@ -79,6 +77,10 @@
 
 #define SHELL_DBUS_NAME "org.gnome.Shell"
 #define SHELL_DBUS_PATH "/org/gnome/Shell"
+
+#define PANEL_DBUS_NAME "org.gnome.Panel"
+
+#define UNITY_DBUS_NAME "com.canonical.Unity"
 
 #define CUSTOM_BINDING_SCHEMA SETTINGS_BINDING_DIR ".custom-keybinding"
 
@@ -136,6 +138,7 @@ typedef struct {
         const char *hard_coded;
         char *custom_path;
         char *custom_command;
+        Key *key;
         guint accel_id;
 } MediaKey;
 
@@ -185,6 +188,13 @@ struct GsdMediaKeysManagerPrivate
         GDBusProxy      *logind_proxy;
         gint             inhibit_keys_fd;
 
+        /* Multihead stuff */
+        GdkScreen *current_screen;
+        GSList *screens;
+
+        GdkScreen       *screen;
+        int              opcode;
+
         GList           *media_players;
 
         GDBusNodeInfo   *introspection_data;
@@ -199,6 +209,12 @@ struct GsdMediaKeysManagerPrivate
         NotifyNotification *volume_notification;
         NotifyNotification *brightness_notification;
         NotifyNotification *kb_backlight_notification;
+
+        /* Legacy keygrabber stuff */
+        guint           unity_name_owner_id;
+        guint           panel_name_owner_id;
+        guint           have_legacy_keygrabber;
+
 };
 
 static void     gsd_media_keys_manager_class_init  (GsdMediaKeysManagerClass *klass);
@@ -345,12 +361,34 @@ ubuntu_osd_notification_show_kb_backlight (GsdMediaKeysManager *manager,
 }
 
 static void
+init_screens (GsdMediaKeysManager *manager)
+{
+        GdkDisplay *display;
+        int i;
+
+        display = gdk_display_get_default ();
+        for (i = 0; i < gdk_display_get_n_screens (display); i++) {
+                GdkScreen *screen;
+
+                screen = gdk_display_get_screen (display, i);
+                if (screen == NULL) {
+                        continue;
+                }
+                manager->priv->screens = g_slist_append (manager->priv->screens, screen);
+        }
+
+        manager->priv->current_screen = manager->priv->screens->data;
+}
+
+static void
 media_key_free (MediaKey *key)
 {
         if (key == NULL)
                 return;
         g_free (key->custom_path);
         g_free (key->custom_command);
+        if (key->key)
+                free_key (key->key);
         g_free (key);
 }
 
@@ -481,11 +519,23 @@ execute (GsdMediaKeysManager *manager,
         g_free (exec);
 }
 
+static void
+print_key_parse_error (MediaKey *key,
+                       const char *str)
+{
+    if (str == NULL || *str == '\0')
+        return;
+    if (key->settings_key != NULL)
+        g_debug ("Unable to parse key '%s' for GSettings entry '%s'", str, key->settings_key);
+    else
+        g_debug ("Unable to parse hard-coded key '%s'", key->hard_coded);
+}
+
 static char *
 get_key_string (GsdMediaKeysManager *manager,
 		MediaKey            *key)
 {
-        if (g_strcmp0 (key->settings_key, "switch-input-source") == 0 || g_strcmp0 (key->settings_key, "switch-input-source-backward") == 0)
+        if (key->settings_key == "switch-input-source" || key->settings_key == "switch-input-source-backward")
 	        return g_settings_get_strv (manager->priv->input_settings, key->settings_key)[0];
         else if (key->settings_key != NULL)
 		return g_settings_get_string (manager->priv->settings, key->settings_key);
@@ -690,11 +740,45 @@ grab_media_key (MediaKey            *key,
 	g_free (tmp);
 }
 
+static gboolean
+grab_media_key_unity (MediaKey            *key,
+                      GsdMediaKeysManager *manager)
+{
+    char *tmp;
+    gboolean need_flush;
+
+    need_flush = FALSE;
+
+    if (key->key != NULL) {
+        need_flush = TRUE;
+        ungrab_key_unsafe (key->key, manager->priv->screens);
+    }
+
+    free_key (key->key);
+    key->key = NULL;
+
+    tmp = get_key_string (manager, key);
+
+    key->key = parse_key (tmp);
+    if (key->key == NULL) {
+        print_key_parse_error (key, tmp);
+        g_free (tmp);
+        return need_flush;
+    }
+
+    grab_key_unsafe (key->key, GSD_KEYGRAB_NORMAL, manager->priv->screens);
+
+    g_free (tmp);
+
+    return TRUE;
+}
+
 static void
 ungrab_accelerator_complete (GObject      *object,
                              GAsyncResult *result,
                              gpointer      user_data)
 {
+	GsdMediaKeysManager *manager = user_data;
 	shell_key_grabber_call_ungrab_accelerator_finish (SHELL_KEY_GRABBER (object),
 	                                                  NULL, result, NULL);
 }
@@ -720,14 +804,20 @@ gsettings_changed_cb (GSettings           *settings,
                       GsdMediaKeysManager *manager)
 {
         int      i;
+        gboolean need_flush = FALSE;
 
+        if (manager->priv->have_legacy_keygrabber)
+                need_flush = TRUE;
         /* Give up if we don't have proxy to the shell */
-        if (!manager->priv->key_grabber)
+        else if (!manager->priv->key_grabber)
                 return;
 
 	/* handled in gsettings_custom_changed_cb() */
         if (g_str_equal (settings_key, "custom-keybindings"))
 		return;
+
+        if (manager->priv->have_legacy_keygrabber)
+                gdk_error_trap_push ();
 
         /* Find the key that was modified */
         for (i = 0; i < manager->priv->keys->len; i++) {
@@ -739,10 +829,21 @@ gsettings_changed_cb (GSettings           *settings,
                 if (key->settings_key == NULL)
                         continue;
                 if (strcmp (settings_key, key->settings_key) == 0) {
-                        grab_media_key (key, manager);
+                        if (!manager->priv->have_legacy_keygrabber)
+                            grab_media_key (key, manager);
+                        else {
+                            if (grab_media_key_unity (key, manager))
+                                need_flush = TRUE;
+                        }
                         break;
                 }
         }
+    if (manager->priv->have_legacy_keygrabber) {
+        if (need_flush)
+            gdk_flush ();
+        if (gdk_error_trap_pop ())
+            g_warning ("Grab failed for some keys, another application may already have access the them.");
+    }
 }
 
 static MediaKey *
@@ -863,7 +964,17 @@ gsettings_custom_changed_cb (GSettings           *settings,
                 if (found)
                         continue;
 
-                ungrab_media_key (key, manager);
+                if (manager->priv->have_legacy_keygrabber && key->key) {
+                        gdk_error_trap_push ();
+
+                        ungrab_key_unsafe (key->key,
+                                           manager->priv->screens);
+
+                        gdk_flush ();
+                        if (gdk_error_trap_pop ())
+                                g_warning ("Ungrab failed for custom key '%s'", key->custom_path);
+                } else
+                        ungrab_media_key (key, manager);
                 g_hash_table_remove (manager->priv->custom_settings,
                                      key->custom_path);
                 g_ptr_array_remove_index_fast (manager->priv->keys, i);
@@ -884,6 +995,9 @@ add_key (GsdMediaKeysManager *manager, guint i)
 	key->modes = media_keys[i].modes;
 
 	g_ptr_array_add (manager->priv->keys, key);
+
+    if (manager->priv->have_legacy_keygrabber)
+        grab_media_key_unity (key, manager);
 }
 
 static void
@@ -893,6 +1007,9 @@ init_kbd (GsdMediaKeysManager *manager)
         int i;
 
         gnome_settings_profile_start (NULL);
+
+        if (manager->priv->have_legacy_keygrabber)
+                gdk_error_trap_push ();
 
         /* Media keys
          * Add hard-coded shortcuts first so that they can't be preempted */
@@ -919,10 +1036,19 @@ init_kbd (GsdMediaKeysManager *manager)
                         continue;
                 }
                 g_ptr_array_add (manager->priv->keys, key);
+
+                if (manager->priv->have_legacy_keygrabber)
+                        grab_media_key_unity (key, manager);
         }
         g_strfreev (custom_paths);
 
-        grab_media_keys (manager);
+        if (!manager->priv->have_legacy_keygrabber)
+            grab_media_keys (manager);
+        else {
+            gdk_flush ();
+            if (gdk_error_trap_pop ())
+                g_warning ("Grab failed for some keys, another application may already have access the them.");
+        }
 
         gnome_settings_profile_end (NULL);
 }
@@ -1985,8 +2111,6 @@ do_config_power_action (GsdMediaKeysManager *manager,
                 /* these actions cannot be handled by media-keys and
                  * are not used in this context */
                 break;
-        default:
-                break;
         }
 
 }
@@ -1998,6 +2122,9 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
         GSettings *settings;
         GVariant *sources;
         gint i, n;
+
+        if (!manager->priv->have_legacy_keygrabber)
+                return;
 
         settings = g_settings_new (GNOME_DESKTOP_INPUT_SOURCES_DIR);
         sources = g_settings_get_value (settings, KEY_INPUT_SOURCES);
@@ -2019,8 +2146,6 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
                 i = 0;
 
         g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
-
-        XkbLockModifiers (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), XkbUseCoreKbd, LockMask, 0);
 
  out:
         g_variant_unref (sources);
@@ -2213,27 +2338,28 @@ static void
 do_screenshot_action (GsdMediaKeysManager *manager,
                       MediaKeyType         type)
 {
-        switch (type){
-        case SCREENSHOT_KEY:
-                execute (manager, "gnome-screenshot", FALSE);
-                break;
-        case WINDOW_SCREENSHOT_KEY:
-                execute (manager, "gnome-screenshot --window", FALSE);
-                break;
-        case AREA_SCREENSHOT_KEY:
-                execute (manager, "gnome-screenshot --area", FALSE);
-                break;
-        case SCREENSHOT_CLIP_KEY:
-                execute (manager, "gnome-screenshot --clipboard", FALSE);
-                break;
-        case WINDOW_SCREENSHOT_CLIP_KEY:
-                execute (manager, "gnome-screenshot --window --clipboard", FALSE);
-                break;
-        case AREA_SCREENSHOT_CLIP_KEY:
-                execute (manager, "gnome-screenshot --area --clipboard", FALSE);
-                break;
-        default:
-                break;
+        if (!manager->priv->have_legacy_keygrabber)
+                gsd_screenshot_take (type);
+        else {
+                switch (type){
+                case SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot", FALSE);
+                        break;
+                case WINDOW_SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot --window", FALSE);
+                        break;
+                case AREA_SCREENSHOT_KEY:
+                        execute (manager, "gnome-screenshot --area", FALSE);
+                        break;
+                case SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --clipboard", FALSE);
+                        break;
+                case WINDOW_SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --window --clipboard", FALSE);
+                        break;
+                case AREA_SCREENSHOT_CLIP_KEY:
+                        execute (manager, "gnome-screenshot --area --clipboard", FALSE);
+                }
         }
 }
 
@@ -2416,6 +2542,109 @@ do_action (GsdMediaKeysManager *manager,
         return FALSE;
 }
 
+static GdkScreen *
+get_screen_from_root (GsdMediaKeysManager *manager,
+                      Window               root)
+{
+        GSList    *l;
+
+        /* Look for which screen we're receiving events */
+        for (l = manager->priv->screens; l != NULL; l = l->next) {
+                GdkScreen *screen = (GdkScreen *) l->data;
+                GdkWindow *window = gdk_screen_get_root_window (screen);
+
+                if (GDK_WINDOW_XID (window) == root)
+                        return screen;
+        }
+
+        return NULL;
+}
+
+static GdkFilterReturn
+filter_key_events (XEvent              *xevent,
+                   GdkEvent            *event,
+                   GsdMediaKeysManager *manager)
+{
+    static gboolean ok_to_switch = TRUE;
+
+    XIEvent             *xiev;
+    XIDeviceEvent       *xev;
+    XGenericEventCookie *cookie;
+        guint                i;
+    guint                deviceid;
+
+        /* verify we have a key event */
+    if (xevent->type != GenericEvent)
+        return GDK_FILTER_CONTINUE;
+    cookie = &xevent->xcookie;
+    if (cookie->extension != manager->priv->opcode)
+        return GDK_FILTER_CONTINUE;
+
+    xiev = (XIEvent *) xevent->xcookie.data;
+
+    if (xiev->evtype != XI_KeyPress &&
+        xiev->evtype != XI_KeyRelease)
+        return GDK_FILTER_CONTINUE;
+
+    xev = (XIDeviceEvent *) xiev;
+
+    deviceid = xev->sourceid;
+
+    if (xiev->evtype == XI_KeyPress)
+        ok_to_switch = TRUE;
+
+        for (i = 0; i < manager->priv->keys->len; i++) {
+                MediaKey *key;
+
+                key = g_ptr_array_index (manager->priv->keys, i);
+
+                if (match_xi2_key (key->key, xev)) {
+                        switch (key->key_type) {
+                        case VOLUME_DOWN_KEY:
+                        case VOLUME_UP_KEY:
+                        case VOLUME_DOWN_QUIET_KEY:
+                        case VOLUME_UP_QUIET_KEY:
+                        case SCREEN_BRIGHTNESS_UP_KEY:
+                        case SCREEN_BRIGHTNESS_DOWN_KEY:
+                        case KEYBOARD_BRIGHTNESS_UP_KEY:
+                        case KEYBOARD_BRIGHTNESS_DOWN_KEY:
+                                /* auto-repeatable keys */
+                                if (xiev->evtype != XI_KeyPress)
+                                        return GDK_FILTER_CONTINUE;
+                                break;
+                        default:
+                                if (xiev->evtype != XI_KeyRelease) {
+                                        return GDK_FILTER_CONTINUE;
+                                }
+                        }
+
+                        manager->priv->current_screen = get_screen_from_root (manager, xev->root);
+
+                        if (key->key_type == CUSTOM_KEY) {
+                                do_custom_action (manager, deviceid, key, xev->time);
+                                return GDK_FILTER_REMOVE;
+                        }
+
+                        if (key->key_type == SWITCH_INPUT_SOURCE_KEY || key->key_type == SWITCH_INPUT_SOURCE_BACKWARD_KEY) {
+                                if (ok_to_switch) {
+                                        do_action (manager, deviceid, key->key_type, xev->time);
+                                        ok_to_switch = FALSE;
+                                }
+
+                                return GDK_FILTER_CONTINUE;
+                        }
+
+                        if (do_action (manager, deviceid, key->key_type, xev->time) == FALSE) {
+                                return GDK_FILTER_REMOVE;
+                        } else {
+                                return GDK_FILTER_CONTINUE;
+                        }
+                }
+        }
+
+        return GDK_FILTER_CONTINUE;
+}
+
 static void
 on_accelerator_activated (ShellKeyGrabber     *grabber,
                           guint                accel_id,
@@ -2532,6 +2761,9 @@ on_shell_appeared (GDBusConnection   *connection,
                    const char        *name_owner,
                    gpointer           user_data)
 {
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") != 0)
+                return;
+
         GsdMediaKeysManager *manager = user_data;
 
         shell_key_grabber_proxy_new_for_bus (G_BUS_TYPE_SESSION,
@@ -2555,12 +2787,69 @@ on_shell_vanished (GDBusConnection  *connection,
                    const char       *name,
                    gpointer          user_data)
 {
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") != 0)
+                return;
+
         GsdMediaKeysManager *manager = user_data;
 
         g_ptr_array_set_size (manager->priv->keys, 0);
 
         g_clear_object (&manager->priv->key_grabber);
         g_clear_object (&manager->priv->shell_proxy);
+}
+
+static void
+start_legacy_grabber (GDBusConnection   *connection,
+                      const char        *name,
+                      const char        *name_owner,
+                      gpointer           user_data)
+{
+        GsdMediaKeysManager *manager = user_data;
+        GSList *l;
+
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") == 0)
+                return;
+
+        manager->priv->have_legacy_keygrabber = TRUE;
+
+        g_debug ("start_legacy_grabber");
+
+        if (manager->priv->keys == NULL)
+                return;
+
+        if (!name_owner)
+                return;
+
+        init_screens (manager);
+        init_kbd (manager);
+
+        /* Start filtering the events */
+        for (l = manager->priv->screens; l != NULL; l = l->next) {
+                gnome_settings_profile_start ("gdk_window_add_filter");
+
+                g_debug ("adding key filter for screen: %d",
+                gdk_screen_get_number (l->data));
+
+                gdk_window_add_filter (gdk_screen_get_root_window (l->data),
+                                       (GdkFilterFunc) filter_key_events,
+                                       manager);
+                gnome_settings_profile_end ("gdk_window_add_filter");
+        }
+}
+
+static void
+stop_legacy_grabber (GDBusConnection  *connection,
+                     const char       *name,
+                     gpointer          user_data)
+{
+        GsdMediaKeysManager *manager = user_data;
+
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "gnome") == 0)
+                return;
+
+        manager->priv->have_legacy_keygrabber = FALSE;
+
+        g_ptr_array_set_size (manager->priv->keys, 0);
 }
 
 static gboolean
@@ -2621,6 +2910,7 @@ start_media_keys_idle_cb (GsdMediaKeysManager *manager)
 	}
 	manager->priv->icon_theme = g_settings_get_string (manager->priv->interface_settings, "icon-theme");
 
+
         ensure_cancellable (&manager->priv->grab_cancellable);
         ensure_cancellable (&manager->priv->shell_cancellable);
 
@@ -2629,6 +2919,20 @@ start_media_keys_idle_cb (GsdMediaKeysManager *manager)
                                   SHELL_DBUS_NAME, 0,
                                   on_shell_appeared,
                                   on_shell_vanished,
+                                  manager, NULL);
+
+        manager->priv->unity_name_owner_id =
+                g_bus_watch_name (G_BUS_TYPE_SESSION,
+                                  UNITY_DBUS_NAME, 0,
+                                  start_legacy_grabber,
+                                  stop_legacy_grabber,
+                                  manager, NULL);
+
+        manager->priv->panel_name_owner_id =
+                g_bus_watch_name (G_BUS_TYPE_SESSION,
+                                  PANEL_DBUS_NAME, 0,
+                                  start_legacy_grabber,
+                                  stop_legacy_grabber,
                                   manager, NULL);
 
         gnome_settings_profile_end (NULL);
@@ -2645,6 +2949,11 @@ gsd_media_keys_manager_start (GsdMediaKeysManager *manager,
         const char * const subsystems[] = { "input", "usb", "sound", NULL };
 
         gnome_settings_profile_start (NULL);
+
+        if (supports_xinput2_devices (&manager->priv->opcode) == FALSE) {
+                g_debug ("No Xinput2 support, disabling plugin");
+                return TRUE;
+        }
 
 #ifdef HAVE_GUDEV
         manager->priv->streams = g_hash_table_new (g_direct_hash, g_direct_equal);
@@ -2664,6 +2973,7 @@ void
 gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
 {
         GsdMediaKeysManagerPrivate *priv = manager->priv;
+        GSList *ls;
         int i;
 
         g_debug ("Stopping media_keys manager");
@@ -2672,6 +2982,14 @@ gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
                 g_cancellable_cancel (priv->bus_cancellable);
                 g_object_unref (priv->bus_cancellable);
                 priv->bus_cancellable = NULL;
+        }
+
+        if (manager->priv->have_legacy_keygrabber){
+                for (ls = priv->screens; ls != NULL; ls = ls->next) {
+                        gdk_window_remove_filter (gdk_screen_get_root_window (ls->data),
+                                                 (GdkFilterFunc) filter_key_events,
+                                                  manager);
+                }
         }
 
         if (manager->priv->gtksettings != NULL) {
@@ -2697,6 +3015,16 @@ gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
         if (manager->priv->name_owner_id) {
                 g_bus_unwatch_name (manager->priv->name_owner_id);
                 manager->priv->name_owner_id = 0;
+        }
+
+        if (manager->priv->unity_name_owner_id) {
+                g_bus_unwatch_name (manager->priv->unity_name_owner_id);
+                manager->priv->unity_name_owner_id = 0;
+        }
+
+        if (manager->priv->panel_name_owner_id) {
+                g_bus_unwatch_name (manager->priv->panel_name_owner_id);
+                manager->priv->panel_name_owner_id = 0;
         }
 
         if (priv->cancellable != NULL) {
@@ -2726,14 +3054,24 @@ gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
         }
 
         if (priv->keys != NULL) {
+                if (manager->priv->have_legacy_keygrabber)
+                        gdk_error_trap_push ();
                 for (i = 0; i < priv->keys->len; ++i) {
                         MediaKey *key;
 
                         key = g_ptr_array_index (manager->priv->keys, i);
-                        ungrab_media_key (key, manager);
+                        if (manager->priv->have_legacy_keygrabber && key->key)
+                                ungrab_key_unsafe (key->key, priv->screens);
+                        else
+                                ungrab_media_key (key, manager);
                 }
                 g_ptr_array_free (priv->keys, TRUE);
                 priv->keys = NULL;
+        }
+
+        if (manager->priv->have_legacy_keygrabber){
+                gdk_flush ();
+                gdk_error_trap_pop_ignored ();
         }
 
         if (priv->grab_cancellable != NULL) {
@@ -2746,6 +3084,7 @@ gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
                 g_clear_object (&priv->shell_cancellable);
         }
 
+        g_clear_pointer (&priv->screens, g_slist_free);
         g_clear_object (&priv->sink);
         g_clear_object (&priv->source);
         g_clear_object (&priv->volume);
