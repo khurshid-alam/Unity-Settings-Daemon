@@ -2697,27 +2697,6 @@ update_theme_settings (GSettings           *settings,
 
 
 static void
-on_wdypi_popup (bool hsmic, bool hpmic, void *userdata)
-{
-        if (!hpmic && !hsmic)
-                wdypi_dialog_kill();
-        else wdypi_dialog_run(hsmic, hpmic, on_wdypi_action, userdata);
-}
-
-static void
-on_control_card_info_updated (GvcMixerControl     *control,
-                              gpointer            card_info,
-                              GsdMediaKeysManager *manager)
-{
-        pa_backend_card_changed (manager->priv->wdypi_pa_backend, card_info);
-#ifdef TEST_WDYPI_DIALOG
-        /* Just a simple way to test the dialog on all types of hardware
-           (pops up dialog on program start, and on every plug in) */
-        on_wdypi_popup (true, true, manager);
-#endif
-}
-
-static void
 launch_sound_settings()
 {
     if (fork() != 0)
@@ -2756,6 +2735,27 @@ on_wdypi_action (int action, void *userdata)
         default:
                 break;
         }
+}
+
+static void
+on_wdypi_popup (bool hsmic, bool hpmic, void *userdata)
+{
+        if (!hpmic && !hsmic)
+                wdypi_dialog_kill();
+        else wdypi_dialog_run(hsmic, hpmic, on_wdypi_action, userdata);
+}
+
+static void
+on_control_card_info_updated (GvcMixerControl     *control,
+                              gpointer            card_info,
+                              GsdMediaKeysManager *manager)
+{
+        pa_backend_card_changed (manager->priv->wdypi_pa_backend, card_info);
+#ifdef TEST_WDYPI_DIALOG
+        /* Just a simple way to test the dialog on all types of hardware
+           (pops up dialog on program start, and on every plug in) */
+        on_wdypi_popup (true, true, manager);
+#endif
 }
 
 static void
