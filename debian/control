@@ -51,7 +51,7 @@ Depends: ${shlibs:Depends},
          gsettings-desktop-schemas (>= 3.7.2.1),
          nautilus-data (>= 2.91.3-1),
          gnome-settings-daemon-schemas,
-         indicator-sound (>= 12.10.2+14.04.20140220),
+         gsettings-ubuntu-schemas (>= 0.0.1+14.04.20140224),
 Recommends: ibus (>= 1.5.0),
             pulseaudio,
             systemd-services

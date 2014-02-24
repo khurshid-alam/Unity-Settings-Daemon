@@ -165,7 +165,7 @@ struct GsdMediaKeysManagerPrivate
         GSettings       *settings;
         GSettings       *input_settings;
         GHashTable      *custom_settings;
-        GSettings       *indicator_settings;
+        GSettings       *sound_settings;
 
         GPtrArray       *keys;
 
@@ -1505,7 +1505,7 @@ do_sound_action (GsdMediaKeysManager *manager,
         if (stream == NULL)
                 return;
 
-        if (g_settings_get_boolean (manager->priv->indicator_settings, "allow-amplified-volume"))
+        if (g_settings_get_boolean (manager->priv->sound_settings, "allow-amplified-volume"))
                 max_volume = PA_VOLUME_UI_MAX;
         else
                 max_volume = PA_VOLUME_NORM;
@@ -2964,7 +2964,7 @@ start_media_keys_idle_cb (GsdMediaKeysManager *manager)
           g_hash_table_new_full (g_str_hash, g_str_equal,
                                  g_free, g_object_unref);
 
-        manager->priv->indicator_settings = g_settings_new ("com.canonical.indicator.sound");
+        manager->priv->sound_settings = g_settings_new ("com.ubuntu.sound");
 
         /* Sound events */
         ca_context_create (&manager->priv->ca);
@@ -3097,7 +3097,7 @@ gsd_media_keys_manager_stop (GsdMediaKeysManager *manager)
         g_clear_object (&priv->power_proxy);
         g_clear_object (&priv->power_screen_proxy);
         g_clear_object (&priv->power_keyboard_proxy);
-        g_clear_object (&priv->indicator_settings);
+        g_clear_object (&priv->sound_settings);
 
         if (manager->priv->name_owner_id) {
                 g_bus_unwatch_name (manager->priv->name_owner_id);
