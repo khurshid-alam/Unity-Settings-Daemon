@@ -120,7 +120,9 @@ static void dialog_create(dialog_window *d, bool show_headset, bool show_mic)
 
     gtk_widget_show_all(d->dialog);
     /* This event did not originate from a pointer or key movement, so we can't
-       use GDK_CURRENT_TIME here. We need to generate a new event timestamp */
+       use GDK_CURRENT_TIME (or just gtk_window_present) here. There is also no
+       other source timestamp to rely on. Without a timestamp, the dialog would
+       often show up behind other windows. */
     timestamp = gdk_x11_get_server_time(gtk_widget_get_window(GTK_WIDGET(d->dialog)));
     gtk_window_present_with_time(GTK_WINDOW(d->dialog), timestamp);
 }
