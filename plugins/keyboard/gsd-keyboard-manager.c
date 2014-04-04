@@ -119,7 +119,7 @@ struct GsdKeyboardManagerPrivate
         GDBusConnection *dbus_connection;
         GDBusNodeInfo *dbus_introspection;
         guint dbus_own_name_id;
-        guint dbus_register_object_id;
+        GSList *dbus_register_object_ids;
 
         GDBusMethodInvocation *invocation;
         guint pending_ops;
@@ -1740,6 +1740,7 @@ got_session_bus (GObject            *source,
 {
         GsdKeyboardManagerPrivate *priv;
         GDBusConnection *connection;
+        GDBusInterfaceInfo **interfaces;
         GError *error = NULL;
         GDBusInterfaceVTable vtable = {
                 (GDBusInterfaceMethodCallFunc) handle_dbus_method_call,
@@ -1757,18 +1758,36 @@ got_session_bus (GObject            *source,
 
         priv = manager->priv;
         priv->dbus_connection = connection;
+        interfaces = priv->dbus_introspection->interfaces;
 
-        priv->dbus_register_object_id = g_dbus_connection_register_object (priv->dbus_connection,
-                                                                           GSD_KEYBOARD_DBUS_PATH,
-                                                                           priv->dbus_introspection->interfaces[0],
-                                                                           &vtable,
-                                                                           manager,
-                                                                           NULL,
-                                                                           &error);
-        if (!priv->dbus_register_object_id) {
-                g_warning ("Error registering object: %s", error->message);
-                g_error_free (error);
-                return;
+        if (interfaces) {
+                for (; *interfaces; interfaces++) {
+                        guint id = g_dbus_connection_register_object (priv->dbus_connection,
+                                                                      GSD_KEYBOARD_DBUS_PATH,
+                                                                      *interfaces,
+                                                                      &vtable,
+                                                                      manager,
+                                                                      NULL,
+                                                                      &error);
+
+                        if (!id) {
+                                GSList *ids;
+
+                                for (ids = priv->dbus_register_object_ids; ids; ids = g_slist_next (ids))
+                                        g_dbus_connection_unregister_object (priv->dbus_connection,
+                                                                             GPOINTER_TO_UINT (ids->data));
+
+                                g_slist_free (priv->dbus_register_object_ids);
+                                priv->dbus_register_object_ids = NULL;
+
+                                g_warning ("Error registering object: %s", error->message);
+                                g_error_free (error);
+                                return;
+                        }
+
+                        priv->dbus_register_object_ids = g_slist_prepend (priv->dbus_register_object_ids,
+                                                                          GUINT_TO_POINTER (id));
+                }
         }
 
         priv->dbus_own_name_id = g_bus_own_name_on_connection (priv->dbus_connection,
@@ -1894,6 +1913,7 @@ void
 gsd_keyboard_manager_stop (GsdKeyboardManager *manager)
 {
         GsdKeyboardManagerPrivate *p = manager->priv;
+        GSList *ids;
 
         g_debug ("Stopping keyboard manager");
 
@@ -1902,11 +1922,11 @@ gsd_keyboard_manager_stop (GsdKeyboardManager *manager)
                 p->dbus_own_name_id = 0;
         }
 
-        if (p->dbus_register_object_id) {
-                g_dbus_connection_unregister_object (p->dbus_connection,
-                                                     p->dbus_register_object_id);
-                p->dbus_register_object_id = 0;
-        }
+        for (ids = p->dbus_register_object_ids; ids; ids = g_slist_next (ids))
+                g_dbus_connection_unregister_object (p->dbus_connection, GPOINTER_TO_UINT (ids->data));
+
+        g_slist_free (p->dbus_register_object_ids);
+        p->dbus_register_object_ids = NULL;
 
         g_cancellable_cancel (p->cancellable);
         g_clear_object (&p->cancellable);
