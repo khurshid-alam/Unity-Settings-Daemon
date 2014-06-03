@@ -1,6 +1,15 @@
 unity-settings-daemon (14.04.0+14.04.20140414-0ubuntu2) UNRELEASED; urgency=medium
 
-  * 
+  [ Alberto Milone ]
+  * gsd-xrandr-manager.c:
+    - Add support for mapping the main touchscreen onto the laptop
+      display (LP: #1287341).
+      This makes sure that the input device knows exactly the area
+      that represents the display when the screen configuration
+      changes. Note: this doesn't cover the tablet use case.
+    - Add support for quirks for touchscreens. This is particularly
+      useful on systems that don't use embedded display connectors
+      i.e. all-in-one systems such as the Dell Optiplex 9030 AIO.
 
  -- Alberto Milone <alberto.milone@canonical.com>  Fri, 23 May 2014 12:01:11 +0200
 
