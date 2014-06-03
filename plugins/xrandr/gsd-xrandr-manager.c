@@ -127,6 +127,8 @@ struct GsdXrandrManagerPrivate {
 #ifdef HAVE_WACOM
         WacomDeviceDatabase *wacom_db;
 #endif /* HAVE_WACOM */
+
+        int main_touchscreen_id;
 };
 
 static const GnomeRRRotation possible_rotations[] = {
@@ -156,6 +158,9 @@ G_DEFINE_TYPE (GsdXrandrManager, gsd_xrandr_manager, G_TYPE_OBJECT)
 static gpointer manager_object = NULL;
 
 static FILE *log_file;
+
+static int map_touch_to_output(GnomeRRScreen *screen, int device_id, GnomeRROutputInfo *output);
+static void do_touchscreen_mapping(GsdXrandrManager *manager);
 
 static void
 log_open (void)
@@ -1818,6 +1823,12 @@ on_randr_event (GnomeRRScreen *screen, gpointer data)
                 use_stored_configuration_or_auto_configure_outputs (manager, config_timestamp);
         }
 
+        if (priv->main_touchscreen_id != -1) {
+                /* Set mapping of input devices onto displays */
+                log_msg("\nSetting touchscreen mapping on RandR event\n");
+                do_touchscreen_mapping(manager);
+        }
+
         log_close ();
 }
 
@@ -2033,6 +2044,94 @@ power_client_changed_cb (UpClient *client, gpointer data)
         }
 }
 
+static void
+set_touchscreen_id (GsdXrandrManager *manager)
+{
+        GsdXrandrManagerPrivate *priv = manager->priv;
+        XDeviceInfo *device_info;
+        int n_devices;
+        int i;
+
+        device_info = XListInputDevices (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()),
+                                         &n_devices);
+        if (device_info == NULL)
+                return;
+
+        for (i = 0; i < n_devices; i++) {
+                if (device_info_is_touchscreen (&device_info[i])) {
+                    /* Let's deal only with the 1st touchscreen */
+                    priv->main_touchscreen_id = (int)device_info[i].id;
+                    break;
+                }
+        }
+
+        XFreeDeviceList (device_info);
+}
+
+static int
+map_touch_to_output (GnomeRRScreen *screen, int device_id,
+                     GnomeRROutputInfo *output)
+{
+        int status = 0;
+        char command[100];
+        gchar *name = gnome_rr_output_info_get_name (output);
+
+        if (!name) {
+                g_debug ("Failure to map screen with missing name");
+                status = 1;
+                goto out;
+        }
+
+        if (gnome_rr_output_info_is_active(output)) {
+                g_debug ("Mapping touchscreen %d onto output %s",
+                         device_id, name);
+                sprintf (command, "xinput  --map-to-output %d %s",
+                         device_id, name);
+                status = system (command);
+        }
+        else {
+                g_debug ("No need to map %d onto output %s. The output is off",
+                         device_id, name);
+        }
+
+out:
+        return (status == 0);
+}
+
+static void
+do_touchscreen_mapping (GsdXrandrManager *manager)
+{
+        GsdXrandrManagerPrivate *priv = manager->priv;
+        GnomeRRScreen *screen = priv->rw_screen;
+        GnomeRRConfig *current;
+        GnomeRROutputInfo *laptop_output;
+
+        if (!supports_xinput_devices ())
+                return;
+
+        current = gnome_rr_config_new_current (screen, NULL);
+        laptop_output = get_laptop_output_info (screen, current);
+
+        if (laptop_output == NULL) {
+                g_debug ("No laptop screen detected");
+                goto out;
+        }
+
+        if (priv->main_touchscreen_id != -1) {
+                /* Set initial mapping */
+                g_debug ("Setting initial touchscreen mapping");
+                map_touch_to_output (screen,
+                                     priv->main_touchscreen_id,
+                                     laptop_output);
+        }
+        else {
+                g_debug ("No main touchscreen detected");
+        }
+
+out:
+        g_object_unref (current);
+}
+
 gboolean
 gsd_xrandr_manager_start (GsdXrandrManager *manager,
                           GError          **error)
@@ -2070,6 +2169,10 @@ gsd_xrandr_manager_start (GsdXrandrManager *manager,
         if (!apply_stored_configuration_at_startup (manager, GDK_CURRENT_TIME)) /* we don't have a real timestamp at startup anyway */
                 if (!apply_default_configuration_from_file (manager, GDK_CURRENT_TIME))
                         apply_default_boot_configuration (manager, GDK_CURRENT_TIME);
+
+        /* Initialise touchscreen mapping */
+        set_touchscreen_id (manager);
+        do_touchscreen_mapping (manager);
 
         log_msg ("State of screen after initial configuration:\n");
         log_screen (manager->priv->rw_screen);
@@ -2149,6 +2252,9 @@ gsd_xrandr_manager_init (GsdXrandrManager *manager)
 
         manager->priv->current_fn_f7_config = -1;
         manager->priv->fn_f7_configs = NULL;
+
+        /* For touchscreen mapping */
+        manager->priv->main_touchscreen_id = -1;
 }
 
 static void
