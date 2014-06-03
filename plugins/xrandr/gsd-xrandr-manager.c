@@ -129,6 +129,7 @@ struct GsdXrandrManagerPrivate {
 #endif /* HAVE_WACOM */
 
         int main_touchscreen_id;
+        gchar *main_touchscreen_name;
 };
 
 static const GnomeRRRotation possible_rotations[] = {
@@ -2044,6 +2045,124 @@ power_client_changed_cb (UpClient *client, gpointer data)
         }
 }
 
+/* Finds an output which matches the given EDID information. Any NULL
+ * parameter will be interpreted to match any value. */
+static GnomeRROutput *
+find_output_by_edid (GnomeRRScreen *rr_screen, const gchar *vendor, const gchar *product, const gchar *serial)
+{
+    GnomeRROutput **rr_outputs;
+    GnomeRROutput *retval = NULL;
+    guint i;
+
+    rr_outputs = gnome_rr_screen_list_outputs (rr_screen);
+
+    for (i = 0; rr_outputs[i] != NULL; i++) {
+        gchar *o_vendor_s;
+        gchar *o_product_s;
+        int o_product;
+        gchar *o_serial_s;
+        int o_serial;
+        gboolean match;
+
+        if (!gnome_rr_output_is_connected (rr_outputs[i]))
+            continue;
+
+        if (!gnome_rr_output_get_ids_from_edid (rr_outputs[i],
+                                &o_vendor_s,
+                                &o_product,
+                                &o_serial))
+            continue;
+
+        o_product_s = g_strdup_printf ("%d", o_product);
+        o_serial_s  = g_strdup_printf ("%d", o_serial);
+
+        g_debug ("Checking for match between '%s','%s','%s' and '%s','%s','%s'", \
+                 vendor, product, serial, o_vendor_s, o_product_s, o_serial_s);
+
+        match = (vendor  == NULL || g_strcmp0 (vendor,  o_vendor_s)  == 0) && \
+                (product == NULL || g_strcmp0 (product, o_product_s) == 0) && \
+                (serial  == NULL || g_strcmp0 (serial,  o_serial_s)  == 0);
+
+        g_free (o_vendor_s);
+        g_free (o_product_s);
+        g_free (o_serial_s);
+
+        if (match) {
+            retval = rr_outputs[i];
+            break;
+        }
+    }
+
+    if (retval == NULL)
+        g_debug ("Did not find a matching output for EDID '%s,%s,%s'",
+             vendor, product, serial);
+
+    return retval;
+}
+
+struct {
+    const gchar *input_device_name;
+    const gchar *edid[3];
+} hardcoded_devices[] = {
+    { "3M 3M MicroTouch USB controller", { "DEL", "DELL S2340T", NULL } },
+    /* Dell OptiPlex 9030 AIO */
+    { "Advanced Silicon S.A CoolTouch(TM) System", { "DEL", "37864", NULL } },
+    /* Dell Inspiron 2350 */
+    { "Advanced Silicon S.A CoolTouch(TM) System", { "DEL", "40b2", NULL } }
+};
+
+static GnomeRROutput *
+get_output_from_quirks (GsdXrandrManager *manager)
+{
+    GsdXrandrManagerPrivate *priv = manager->priv;
+    GnomeRROutput *match = NULL;
+    guint i;
+
+    for (i = 0; i < G_N_ELEMENTS (hardcoded_devices); i++) {
+        if (g_strcmp0 (manager->priv->main_touchscreen_name,
+                       hardcoded_devices[i].input_device_name) != 0)
+            continue;
+
+        match = find_output_by_edid (priv->rw_screen, hardcoded_devices[i].edid[0],
+                                     hardcoded_devices[i].edid[1],
+                                     hardcoded_devices[i].edid[2]);
+        if (match) {
+            g_debug ("Found matching quirk.");
+            break;
+        }
+    }
+
+    return match;
+}
+
+
+static gboolean
+is_quirked (GnomeRROutputInfo *output, GnomeRROutput *to_match)
+{
+        return (g_strcmp0 (gnome_rr_output_info_get_name (output),
+                       gnome_rr_output_get_name (to_match) ) == 0);
+}
+
+
+static GnomeRROutputInfo *
+get_mappable_output_info (GsdXrandrManager *manager, GnomeRRScreen *screen, GnomeRRConfig *config)
+{
+        int i;
+        GnomeRROutputInfo **outputs = gnome_rr_config_get_outputs (config);
+
+        GnomeRROutput *quirk_match = NULL;
+
+        quirk_match = get_output_from_quirks (manager);
+
+        for (i = 0; outputs[i] != NULL; i++) {
+                if (is_laptop (screen, outputs[i]) || (quirk_match && is_quirked (outputs[i], quirk_match)))
+                        return outputs[i];
+        }
+
+        return NULL;
+}
+
+
 static void
 set_touchscreen_id (GsdXrandrManager *manager)
 {
@@ -2061,6 +2180,7 @@ set_touchscreen_id (GsdXrandrManager *manager)
                 if (device_info_is_touchscreen (&device_info[i])) {
                     /* Let's deal only with the 1st touchscreen */
                     priv->main_touchscreen_id = (int)device_info[i].id;
+                    priv->main_touchscreen_name = g_strdup (device_info[i].name);
                     break;
                 }
         }
@@ -2110,7 +2230,7 @@ do_touchscreen_mapping (GsdXrandrManager *manager)
                 return;
 
         current = gnome_rr_config_new_current (screen, NULL);
-        laptop_output = get_laptop_output_info (screen, current);
+        laptop_output = get_mappable_output_info (manager, screen, current);
 
         if (laptop_output == NULL) {
                 g_debug ("No laptop screen detected");
@@ -2230,6 +2350,9 @@ gsd_xrandr_manager_stop (GsdXrandrManager *manager)
         }
 #endif /* HAVE_WACOM */
 
+        if (manager->priv->main_touchscreen_name)
+            g_free(manager->priv->main_touchscreen_name);
+
         log_open ();
         log_msg ("STOPPING XRANDR PLUGIN\n------------------------------------------------------------\n");
         log_close ();
@@ -2255,6 +2378,7 @@ gsd_xrandr_manager_init (GsdXrandrManager *manager)
 
         /* For touchscreen mapping */
         manager->priv->main_touchscreen_id = -1;
+        manager->priv->main_touchscreen_name = NULL;
 }
 
 static void
