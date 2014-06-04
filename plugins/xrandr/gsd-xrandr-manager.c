@@ -160,6 +160,7 @@ static gpointer manager_object = NULL;
 
 static FILE *log_file;
 
+static GnomeRROutput * input_info_find_size_match (GsdXrandrManager *manager, GnomeRRScreen *rr_screen);
 static int map_touch_to_output(GnomeRRScreen *screen, int device_id, GnomeRROutputInfo *output);
 static void do_touchscreen_mapping(GsdXrandrManager *manager);
 
@@ -2045,104 +2046,98 @@ power_client_changed_cb (UpClient *client, gpointer data)
         }
 }
 
-/* Finds an output which matches the given EDID information. Any NULL
- * parameter will be interpreted to match any value. */
-static GnomeRROutput *
-find_output_by_edid (GnomeRRScreen *rr_screen, const gchar *vendor, const gchar *product, const gchar *serial)
-{
-    GnomeRROutput **rr_outputs;
-    GnomeRROutput *retval = NULL;
-    guint i;
-
-    rr_outputs = gnome_rr_screen_list_outputs (rr_screen);
-
-    for (i = 0; rr_outputs[i] != NULL; i++) {
-        gchar *o_vendor_s;
-        gchar *o_product_s;
-        int o_product;
-        gchar *o_serial_s;
-        int o_serial;
-        gboolean match;
-
-        if (!gnome_rr_output_is_connected (rr_outputs[i]))
-            continue;
-
-        if (!gnome_rr_output_get_ids_from_edid (rr_outputs[i],
-                                &o_vendor_s,
-                                &o_product,
-                                &o_serial))
-            continue;
-
-        o_product_s = g_strdup_printf ("%d", o_product);
-        o_serial_s  = g_strdup_printf ("%d", o_serial);
-
-        g_debug ("Checking for match between '%s','%s','%s' and '%s','%s','%s'", \
-                 vendor, product, serial, o_vendor_s, o_product_s, o_serial_s);
-
-        match = (vendor  == NULL || g_strcmp0 (vendor,  o_vendor_s)  == 0) && \
-                (product == NULL || g_strcmp0 (product, o_product_s) == 0) && \
-                (serial  == NULL || g_strcmp0 (serial,  o_serial_s)  == 0);
-
-        g_free (o_vendor_s);
-        g_free (o_product_s);
-        g_free (o_serial_s);
-
-        if (match) {
-            retval = rr_outputs[i];
-            break;
-        }
-    }
-
-    if (retval == NULL)
-        g_debug ("Did not find a matching output for EDID '%s,%s,%s'",
-             vendor, product, serial);
-
-    return retval;
-}
-
-struct {
-    const gchar *input_device_name;
-    const gchar *edid[3];
-} hardcoded_devices[] = {
-    { "3M 3M MicroTouch USB controller", { "DEL", "DELL S2340T", NULL } },
-    /* Dell OptiPlex 9030 AIO */
-    { "Advanced Silicon S.A CoolTouch(TM) System", { "DEL", "37864", NULL } },
-    /* Dell Inspiron 2350 */
-    { "Advanced Silicon S.A CoolTouch(TM) System", { "DEL", "40b2", NULL } }
-};
-
-static GnomeRROutput *
-get_output_from_quirks (GsdXrandrManager *manager)
-{
-    GsdXrandrManagerPrivate *priv = manager->priv;
-    GnomeRROutput *match = NULL;
-    guint i;
-
-    for (i = 0; i < G_N_ELEMENTS (hardcoded_devices); i++) {
-        if (g_strcmp0 (manager->priv->main_touchscreen_name,
-                       hardcoded_devices[i].input_device_name) != 0)
-            continue;
-
-        match = find_output_by_edid (priv->rw_screen, hardcoded_devices[i].edid[0],
-                                     hardcoded_devices[i].edid[1],
-                                     hardcoded_devices[i].edid[2]);
-        if (match) {
-            g_debug ("Found matching quirk.");
-            break;
-        }
-    }
-
-    return match;
-}
-
-
 static gboolean
-is_quirked (GnomeRROutputInfo *output, GnomeRROutput *to_match)
+matches_name (GnomeRROutputInfo *output, GnomeRROutput *to_match)
 {
         return (g_strcmp0 (gnome_rr_output_info_get_name (output),
                        gnome_rr_output_get_name (to_match) ) == 0);
 }
 
+static gint
+monitor_for_output (GnomeRROutput *output)
+{
+        GdkScreen *screen = gdk_screen_get_default ();
+        GnomeRRCrtc *crtc = gnome_rr_output_get_crtc (output);
+        gint x, y;
+
+        if (!crtc)
+                return -1;
+
+        gnome_rr_crtc_get_position (crtc, &x, &y);
+
+        return gdk_screen_get_monitor_at_point (screen, x, y);
+}
+
+static gboolean
+output_get_dimensions (GnomeRROutput *output,
+                       guint         *width,
+                       guint         *height)
+{
+        GdkScreen *screen = gdk_screen_get_default ();
+        gint monitor_num;
+
+        monitor_num = monitor_for_output (output);
+
+        if (monitor_num < 0)
+                return FALSE;
+
+        *width = gdk_screen_get_monitor_width_mm (screen, monitor_num);
+        *height = gdk_screen_get_monitor_height_mm (screen, monitor_num);
+        return TRUE;
+}
+
+static GnomeRROutput *
+input_info_find_size_match (GsdXrandrManager *manager, GnomeRRScreen *rr_screen)
+{
+        guint i, input_width, input_height, output_width, output_height;
+        gdouble min_width_diff, min_height_diff;
+        GnomeRROutput **outputs, *match = NULL;
+        GsdXrandrManagerPrivate *priv = manager->priv;
+
+        g_return_val_if_fail (rr_screen != NULL, NULL);
+
+        if (!xdevice_get_dimensions (priv->main_touchscreen_id,
+                                     &input_width, &input_height))
+                return NULL;
+
+        /* Restrict the matches to be below a narrow percentage */
+        min_width_diff = min_height_diff = 0.05;
+
+        g_debug ("Input device '%s' has %dx%d mm",
+                 priv->main_touchscreen_name, input_width, input_height);
+
+        outputs = gnome_rr_screen_list_outputs (rr_screen);
+
+        for (i = 0; outputs[i] != NULL; i++) {
+                gdouble width_diff, height_diff;
+                if (!output_get_dimensions (outputs[i], &output_width, &output_height))
+                        continue;
+
+                width_diff = ABS (1 - ((gdouble) output_width / input_width));
+                height_diff = ABS (1 - ((gdouble) output_height / input_height));
+
+                g_debug ("Output '%s' has size %dx%d mm, deviation from "
+                         "input device size: %.2f width, %.2f height ",
+                         gnome_rr_output_get_name (outputs[i]),
+                         output_width, output_height, width_diff, height_diff);
+
+                if (width_diff <= min_width_diff && height_diff <= min_height_diff) {
+                    match = outputs[i];
+                    min_width_diff = width_diff;
+                    min_height_diff = height_diff;
+                }
+        }
+
+        if (match) {
+                g_debug ("Output '%s' is considered a best size match (%.2f / %.2f)",
+                         gnome_rr_output_get_name (match),
+                         min_width_diff, min_height_diff);
+        } else {
+                g_debug ("No input/output size match was found\n");
+        }
+
+        return match;
+}
 
 static GnomeRROutputInfo *
 get_mappable_output_info (GsdXrandrManager *manager, GnomeRRScreen *screen, GnomeRRConfig *config)
@@ -2150,18 +2145,17 @@ get_mappable_output_info (GsdXrandrManager *manager, GnomeRRScreen *screen, Gnom
         int i;
         GnomeRROutputInfo **outputs = gnome_rr_config_get_outputs (config);
 
-        GnomeRROutput *quirk_match = NULL;
+        GnomeRROutput *size_match = NULL;
 
-        quirk_match = get_output_from_quirks (manager);
+        size_match = input_info_find_size_match (manager, screen);
 
         for (i = 0; outputs[i] != NULL; i++) {
-                if (is_laptop (screen, outputs[i]) || (quirk_match && is_quirked (outputs[i], quirk_match)))
+                if (is_laptop (screen, outputs[i]) || (size_match && matches_name (outputs[i], size_match)))
                         return outputs[i];
         }
 
         return NULL;
 }
-
 
 static void
 set_touchscreen_id (GsdXrandrManager *manager)
