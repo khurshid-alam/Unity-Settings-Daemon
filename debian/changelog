@@ -1,4 +1,4 @@
-unity-settings-daemon (14.04.0+14.04.20140414-0ubuntu2) UNRELEASED; urgency=medium
+unity-settings-daemon (14.04.0+14.10.20140604-0ubuntu1) utopic; urgency=medium
 
   [ Alberto Milone ]
   * gsd-xrandr-manager.c:
@@ -15,7 +15,7 @@ unity-settings-daemon (14.04.0+14.04.20140414-0ubuntu2) UNRELEASED; urgency=medi
       touchscreens. When we finally sync with the upstream code
       we can drop this.
 
- -- Alberto Milone <alberto.milone@canonical.com>  Fri, 23 May 2014 12:01:11 +0200
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Wed, 04 Jun 2014 15:42:47 +0000
 
 unity-settings-daemon (14.04.0+14.04.20140414-0ubuntu1) trusty; urgency=low
 
