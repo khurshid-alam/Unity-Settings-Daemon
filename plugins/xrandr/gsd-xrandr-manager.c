@@ -161,8 +161,8 @@ static gpointer manager_object = NULL;
 static FILE *log_file;
 
 static GnomeRROutput * input_info_find_size_match (GsdXrandrManager *manager, GnomeRRScreen *rr_screen);
-static int map_touch_to_output(GnomeRRScreen *screen, int device_id, GnomeRROutputInfo *output);
-static void do_touchscreen_mapping(GsdXrandrManager *manager);
+static int map_touch_to_output (GnomeRRScreen *screen, int device_id, GnomeRROutputInfo *output);
+static void do_touchscreen_mapping (GsdXrandrManager *manager);
 
 static void
 log_open (void)
@@ -1827,8 +1827,8 @@ on_randr_event (GnomeRRScreen *screen, gpointer data)
 
         if (priv->main_touchscreen_id != -1) {
                 /* Set mapping of input devices onto displays */
-                log_msg("\nSetting touchscreen mapping on RandR event\n");
-                do_touchscreen_mapping(manager);
+                log_msg ("\nSetting touchscreen mapping on RandR event\n");
+                do_touchscreen_mapping (manager);
         }
 
         log_close ();
@@ -2344,8 +2344,7 @@ gsd_xrandr_manager_stop (GsdXrandrManager *manager)
         }
 #endif /* HAVE_WACOM */
 
-        if (manager->priv->main_touchscreen_name)
-            g_free(manager->priv->main_touchscreen_name);
+        g_free (manager->priv->main_touchscreen_name);
 
         log_open ();
         log_msg ("STOPPING XRANDR PLUGIN\n------------------------------------------------------------\n");
