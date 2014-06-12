@@ -50,6 +50,10 @@
 #include <ibus.h>
 #endif
 
+#ifdef HAVE_FCITX
+#include "fcitx.h"
+#endif /* HAVE_FCITX */
+
 #include <act/act.h>
 
 #include "gnome-settings-session.h"
@@ -87,8 +91,9 @@
 #define KEY_INPUT_SOURCES        "sources"
 #define KEY_KEYBOARD_OPTIONS     "xkb-options"
 
-#define INPUT_SOURCE_TYPE_XKB  "xkb"
-#define INPUT_SOURCE_TYPE_IBUS "ibus"
+#define INPUT_SOURCE_TYPE_XKB   "xkb"
+#define INPUT_SOURCE_TYPE_IBUS  "ibus"
+#define INPUT_SOURCE_TYPE_FCITX "fcitx"
 
 #define DEFAULT_LANGUAGE "en_US"
 #define DEFAULT_LAYOUT "us"
@@ -157,6 +162,26 @@ static const gchar introspection_xml[] =
         "</node>";
 
 static gpointer manager_object = NULL;
+
+static gboolean
+is_ibus_active (void)
+{
+#ifdef HAVE_IBUS
+        return g_strcmp0 (g_getenv ("GTK_IM_MODULE"), "ibus") == 0;
+#else
+        return FALSE;
+#endif /* HAVE_IBUS */
+}
+
+static gboolean
+is_fcitx_active (void)
+{
+#ifdef HAVE_FCITX
+        return g_strcmp0 (g_getenv ("GTK_IM_MODULE"), "fcitx") == 0;
+#else
+        return FALSE;
+#endif /* HAVE_FCITX */
+}
 
 static void
 init_builder_with_sources (GVariantBuilder *builder,
@@ -1104,10 +1129,14 @@ apply_input_source (GsdKeyboardManager *manager,
         priv->active_input_source = current;
 
 #ifdef HAVE_IBUS
-        maybe_start_ibus (manager);
+        if (is_ibus_active ())
+                maybe_start_ibus (manager);
 #endif
 
         g_variant_get_child (sources, current, "(&s&s)", &type, &id);
+
+        if (!g_str_equal (type, INPUT_SOURCE_TYPE_FCITX) && is_fcitx_active ())
+                fcitx_deactivate_input_method ();
 
         if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
                 const gchar *l, *v;
@@ -1121,8 +1150,10 @@ apply_input_source (GsdKeyboardManager *manager,
                         goto exit;
                 }
 #ifdef HAVE_IBUS
-                set_gtk_im_module (manager, sources);
-                set_ibus_xkb_engine (manager);
+                if (is_ibus_active ()) {
+                        set_gtk_im_module (manager, sources);
+                        set_ibus_xkb_engine (manager);
+                }
 #endif
         } else if (g_str_equal (type, INPUT_SOURCE_TYPE_IBUS)) {
 #ifdef HAVE_IBUS
@@ -1153,6 +1184,15 @@ apply_input_source (GsdKeyboardManager *manager,
                 set_ibus_engine (manager, id);
 #else
                 g_warning ("IBus input source type specified but IBus support was not compiled");
+#endif
+        } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+#ifdef HAVE_FCITX
+                if (is_fcitx_active ())
+                        fcitx_activate_input_method (id);
+                else
+                        g_warning ("Fcitx input source type specified but Fcitx is disabled");
+#else
+                g_warning ("Fcitx input source type specified but Fcitx support was not compiled");
 #endif
         } else {
                 g_warning ("Unknown input source type '%s'", type);
@@ -1841,6 +1881,22 @@ out:
         register_manager_dbus (manager);
 }
 
+static void
+fcitx_started_cb (GObject      *source_object,
+                  GAsyncResult *result,
+                  gpointer      user_data)
+{
+        GsdKeyboardManager *manager = user_data;
+        GError *error = NULL;
+
+        if (fcitx_start_finish (result, &error)) {
+                apply_input_sources_settings (manager->priv->input_sources_settings, NULL, 0, manager);
+        } else {
+                g_warning ("Couldn't connect to Fcitx: %s", error->message);
+                g_error_free (error);
+        }
+}
+
 static gboolean
 start_keyboard_idle_cb (GsdKeyboardManager *manager)
 {
@@ -1859,6 +1915,9 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
         manager->priv->xkb_info = gnome_xkb_info_new ();
 
         manager->priv->cancellable = g_cancellable_new ();
+
+        if (is_fcitx_active ())
+                fcitx_start_async (NULL, fcitx_started_cb, manager);
 
         g_dbus_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
                                   G_DBUS_PROXY_FLAGS_NONE,
@@ -1934,8 +1993,12 @@ gsd_keyboard_manager_stop (GsdKeyboardManager *manager)
         g_clear_object (&p->xkb_info);
         g_clear_object (&p->localed);
 
+        if (is_fcitx_active ())
+                fcitx_stop ();
+
 #ifdef HAVE_IBUS
-        clear_ibus (manager);
+        if (is_ibus_active ())
+                clear_ibus (manager);
 #endif
 
         if (p->device_manager != NULL) {
