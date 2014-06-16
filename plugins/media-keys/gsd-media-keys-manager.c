@@ -2126,12 +2126,33 @@ do_config_power_action (GsdMediaKeysManager *manager,
 
 }
 
+static gboolean
+is_ibus_active (void)
+{
+#ifdef HAVE_IBUS
+        return g_strcmp0 (g_getenv ("GTK_IM_MODULE"), "ibus") == 0;
+#else
+        return FALSE;
+#endif /* HAVE_IBUS */
+}
+
+static gboolean
+is_fcitx_active (void)
+{
+#ifdef HAVE_FCITX
+        return g_strcmp0 (g_getenv ("GTK_IM_MODULE"), "fcitx") == 0;
+#else
+        return FALSE;
+#endif /* HAVE_FCITX */
+}
+
 static void
 do_switch_input_source_action (GsdMediaKeysManager *manager,
                                MediaKeyType         type)
 {
         GSettings *settings;
         GVariant *sources;
+        const gchar *source_type;
         gint i, n;
 
         if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "ubuntu") != 0)
@@ -2147,15 +2168,19 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
 
         i = g_settings_get_uint (settings, KEY_CURRENT_INPUT_SOURCE);
 
-        if (type == SWITCH_INPUT_SOURCE_KEY)
-                i += 1;
-        else
-                i -= 1;
-
-        if (i < 0)
-                i = n - 1;
-        else if (i >= n)
-                i = 0;
+        if (type == SWITCH_INPUT_SOURCE_KEY) {
+                do {
+                        i = (i + 1) % n;
+                        g_variant_get_child (sources, i, "(&s&s)", &source_type, NULL);
+                } while ((g_str_equal (source_type, "ibus") && !is_ibus_active ()) ||
+                         (g_str_equal (source_type, "fcitx") && !is_fcitx_active ()));
+        } else {
+                do {
+                        i = (i + n - 1) % n;
+                        g_variant_get_child (sources, i, "(&s&s)", &source_type, NULL);
+                } while ((g_str_equal (source_type, "ibus") && !is_ibus_active ()) ||
+                         (g_str_equal (source_type, "fcitx") && !is_fcitx_active ()));
+        }
 
         g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
 
