@@ -300,6 +300,37 @@ fcitx_activate_input_method (const gchar *id)
 {
   if (input_method_proxy != NULL)
     {
+      GVariant *list = fcitx_input_method_get_imlist (input_method_proxy);
+      GVariantIter iter;
+      const gchar *display_name;
+      const gchar *name;
+      const gchar *language_code;
+      gboolean enabled;
+
+      g_variant_iter_init (&iter, list);
+      while (g_variant_iter_next (&iter, "(&s&s&sb)", NULL, &name, NULL, &enabled))
+        {
+          if (g_str_equal (name, id))
+            {
+              if (!enabled)
+                {
+                  GVariantBuilder builder;
+
+                  g_variant_builder_init (&builder, g_variant_get_type (list));
+
+                  g_variant_iter_init (&iter, list);
+                  while (g_variant_iter_next (&iter, "(&s&s&sb)", &display_name, &name, &language_code, &enabled))
+                    g_variant_builder_add (&builder, "(sssb)", display_name, name, language_code, enabled || g_str_equal (name, id));
+
+                  list = g_variant_ref_sink (g_variant_builder_end (&builder));
+                  fcitx_input_method_set_imlist (input_method_proxy, list);
+                  g_variant_unref (list);
+                }
+
+              break;
+            }
+        }
+
       fcitx_input_method_call_activate_im (input_method_proxy, NULL, NULL, NULL);
 
       if (id != NULL)
