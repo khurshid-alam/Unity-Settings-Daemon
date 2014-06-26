@@ -35,7 +35,6 @@
 #include <gio/gunixfdlist.h>
 
 #define GNOME_DESKTOP_USE_UNSTABLE_API
-#include <libgnome-desktop/gnome-rr.h>
 #include <libgnome-desktop/gnome-idle-monitor.h>
 
 #include <gsd-input-helper.h>
@@ -50,6 +49,7 @@
 #include "gnome-settings-session.h"
 #include "gsd-enums.h"
 #include "gsd-power-manager.h"
+#include "gsd-rr.h"
 
 #define GNOME_SESSION_DBUS_NAME                 "org.gnome.SessionManager"
 #define GNOME_SESSION_DBUS_PATH_PRESENCE        "/org/gnome/SessionManager/Presence"
@@ -181,7 +181,7 @@ struct GsdPowerManagerPrivate
         GIcon                   *previous_icon;
         GPtrArray               *devices_array;
         UpDevice                *device_composite;
-        GnomeRRScreen           *rr_screen;
+        GsdRRScreen           *rr_screen;
         NotifyNotification      *notification_ups_discharging;
         NotifyNotification      *notification_low;
         NotifyNotification      *notification_sleep_warning;
@@ -1989,8 +1989,8 @@ backlight_enable (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        ret = gnome_rr_screen_set_dpms_mode (manager->priv->rr_screen,
-                                             GNOME_RR_DPMS_ON,
+        ret = gsd_rr_screen_set_dpms_mode (manager->priv->rr_screen,
+                                             GSD_RR_DPMS_ON,
                                              &error);
         if (!ret) {
                 g_warning ("failed to turn the panel on: %s",
@@ -2007,8 +2007,8 @@ backlight_disable (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        ret = gnome_rr_screen_set_dpms_mode (manager->priv->rr_screen,
-                                             GNOME_RR_DPMS_OFF,
+        ret = gsd_rr_screen_set_dpms_mode (manager->priv->rr_screen,
+                                             GSD_RR_DPMS_OFF,
                                              &error);
         if (!ret) {
                 g_warning ("failed to turn the panel off: %s",
@@ -2267,7 +2267,7 @@ do_lid_closed_action (GsdPowerManager *manager)
                          NULL);
 
         /* refresh RANDR so we get an accurate view of what monitors are plugged in when the lid is closed */
-        gnome_rr_screen_refresh (manager->priv->rr_screen, NULL); /* NULL-GError */
+        gsd_rr_screen_refresh (manager->priv->rr_screen, NULL); /* NULL-GError */
 
         restart_inhibit_lid_switch_timer (manager);
 
@@ -3339,7 +3339,7 @@ uninhibit_suspend (GsdPowerManager *manager)
 }
 
 static void
-on_randr_event (GnomeRRScreen *screen, gpointer user_data)
+on_randr_event (GsdRRScreen *screen, gpointer user_data)
 {
         GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
 
@@ -3424,7 +3424,7 @@ gsd_power_manager_start (GsdPowerManager *manager,
         gnome_settings_profile_start (NULL);
 
         /* coldplug the list of screens */
-        manager->priv->rr_screen = gnome_rr_screen_new (gdk_screen_get_default (), error);
+        manager->priv->rr_screen = gsd_rr_screen_new (gdk_screen_get_default (), error);
         if (manager->priv->rr_screen == NULL) {
                 g_debug ("Couldn't detect any screens, disabling plugin");
                 return FALSE;

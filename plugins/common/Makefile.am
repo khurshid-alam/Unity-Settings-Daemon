@@ -1,6 +1,7 @@
 plugin_name = common
 
-noinst_LTLIBRARIES = libcommon.la
+noinst_LTLIBRARIES = libcommon.la librr.la
+libexec_PROGRAMS = check_gl_texture_size
 
 libcommon_la_SOURCES = \
 	gsd-keygrab.c		\
@@ -23,6 +24,35 @@ libcommon_la_LDFLAGS = \
 libcommon_la_LIBADD  = \
 	$(SETTINGS_PLUGIN_LIBS)		\
 	$(COMMON_LIBS)
+
+librr_la_SOURCES =		\
+	gsd-pnp-ids.c \
+	gsd-pnp-ids.h \
+	gsd-rr.c \
+	gsd-rr.h \
+	gsd-rr-config.c \
+	gsd-rr-config.h \
+	gsd-rr-output-info.c \
+	gsd-rr-private.h \
+	display-name.c \
+	edid-parse.c \
+	edid.h
+
+librr_la_CFLAGS = 		\
+	-DLIBEXECDIR=\""$(libexecdir)\""			\
+	-DPNP_IDS=\""$(datadir)/hwdata/pnp.ids"\"			\
+	-DGNOMELOCALEDIR=\""$(datadir)/locale"\"        \
+	$(LIBRR_CFLAGS)
+
+librr_la_LIBADD = 		\
+	-lm \
+	$(LIBRR_LIBS)
+
+check_gl_texture_size_CPPFLAGS = \
+	$(CHECK_GL_TEXTURE_SIZE_CFLAGS)
+
+check_gl_texture_size_LDADD = \
+	$(CHECK_GL_TEXTURE_SIZE_LIBS)
 
 libexec_PROGRAMS = usd-test-input-helper
 

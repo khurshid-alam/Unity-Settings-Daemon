@@ -5,6 +5,7 @@ INCLUDES = \
 	-DGNOME_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\"	\
 	-DLIBEXECDIR=\""$(libexecdir)"\" 			\
 	-DGNOME_SETTINGS_PLUGINDIR=\""$(plugindir)"\"		\
+	-I$(top_srcdir)/plugins/common/			\
 	$(WARN_CFLAGS)						\
 	$(DISABLE_DEPRECATED_CFLAGS)				\
 	$(SETTINGS_DAEMON_CFLAGS)				\
@@ -33,6 +34,7 @@ libgsd_la_CFLAGS =		\
 	$(NULL)
 
 libgsd_la_LIBADD =		\
+	$(top_builddir)/plugins/common/librr.la			\
 	$(SETTINGS_DAEMON_LIBS)		\
 	$(GIOUNIX_LIBS)		\
 	$(NULL)

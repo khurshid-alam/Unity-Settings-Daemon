@@ -54,6 +54,7 @@ usd_test_xrandr_CFLAGS =			\
 usd_test_xrandr_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
+	$(top_builddir)/plugins/common/librr.la		\
 	$(SETTINGS_DAEMON_LIBS)			\
 	$(SETTINGS_PLUGIN_LIBS)			\
 	$(XRANDR_LIBS)
