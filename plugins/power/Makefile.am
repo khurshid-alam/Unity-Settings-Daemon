@@ -80,8 +80,8 @@ usd_test_power_CPPFLAGS = $(libpower_la_CPPFLAGS) -DGSD_MOCK=1 -DGSD_ACTION_DELA
 usd_test_power_LDADD =					\
 	-lm						\
 	$(top_builddir)/plugins/common/libcommon.la	\
-	$(top_builddir)/plugins/common/librr.la	\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la \
+	$(top_builddir)/gnome-settings-daemon/librr.la	\
 	$(POWER_LIBS)					\
 	$(SETTINGS_PLUGIN_LIBS)
 

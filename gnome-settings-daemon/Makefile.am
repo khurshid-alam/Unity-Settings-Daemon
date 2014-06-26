@@ -15,6 +15,38 @@ INCLUDES = \
 
 privlibdir = $(pkglibdir)-$(GSD_API_VERSION)
 
+noinst_LTLIBRARIES = librr.la
+libexec_PROGRAMS = check_gl_texture_size
+
+librr_la_SOURCES =		\
+	gsd-pnp-ids.c \
+	gsd-pnp-ids.h \
+	gsd-rr.c \
+	gsd-rr.h \
+	gsd-rr-config.c \
+	gsd-rr-config.h \
+	gsd-rr-output-info.c \
+	gsd-rr-private.h \
+	display-name.c \
+	edid-parse.c \
+	edid.h
+
+librr_la_CFLAGS = 		\
+	-DLIBEXECDIR=\""$(libexecdir)\""			\
+	-DPNP_IDS=\""$(datadir)/hwdata/pnp.ids"\"			\
+	-DGNOMELOCALEDIR=\""$(datadir)/locale"\"        \
+	$(LIBRR_CFLAGS)
+
+librr_la_LIBADD = 		\
+	-lm \
+	$(LIBRR_LIBS)
+
+check_gl_texture_size_CPPFLAGS = \
+	$(CHECK_GL_TEXTURE_SIZE_CFLAGS)
+
+check_gl_texture_size_LDADD = \
+	$(CHECK_GL_TEXTURE_SIZE_LIBS)
+
 privlib_LTLIBRARIES =		\
 	libgsd.la		\
 	$(NULL)
@@ -34,7 +66,7 @@ libgsd_la_CFLAGS =		\
 	$(NULL)
 
 libgsd_la_LIBADD =		\
-	$(top_builddir)/plugins/common/librr.la			\
+	librr.la			\
 	$(SETTINGS_DAEMON_LIBS)		\
 	$(GIOUNIX_LIBS)		\
 	$(NULL)
