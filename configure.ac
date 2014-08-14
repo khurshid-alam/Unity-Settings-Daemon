@@ -54,7 +54,6 @@ LIBWACOM_REQUIRED_VERSION=0.7
 LIBRSVG_REQUIRED_VERSION=2.36.2
 UPOWER_REQUIRED_VERSION=0.9.11
 IBUS_REQUIRED_VERSION=1.4.99
-FCITX_REQUIRED_VERSION=4.2.8.3
 GSETTINGS_DESKTOP_SCHEMAS_REQUIRED_VERSION=3.7.2.1
 
 EXTRA_COMPILE_WARNINGS(yes)
@@ -196,21 +195,7 @@ else
 fi
 AM_CONDITIONAL(HAVE_IBUS, test "x$enable_ibus" == "xyes")
 
-AC_ARG_ENABLE(fcitx,
-        AS_HELP_STRING([--disable-fcitx],
-                       [Disable Fcitx support]),
-        enable_fcitx=$enableval,
-        enable_fcitx=yes)
-
-if test "x$enable_fcitx" = "xyes" ; then
-        FCITX_MODULE="fcitx >= $FCITX_REQUIRED_VERSION"
-        AC_DEFINE(HAVE_FCITX, 1, [Defined if Fcitx support is enabled])
-else
-        FCITX_MODULE=
-fi
-AM_CONDITIONAL(HAVE_FCITX, test "x$enable_fcitx" == "xyes")
-
-PKG_CHECK_MODULES(KEYBOARD, accountsservice xkbfile $IBUS_MODULE $FCITX_MODULE gnome-desktop-3.0 >= $GNOME_DESKTOP_REQUIRED_VERSION)
+PKG_CHECK_MODULES(KEYBOARD, accountsservice xkbfile $IBUS_MODULE gnome-desktop-3.0 >= $GNOME_DESKTOP_REQUIRED_VERSION)
 
 dnl ---------------------------------------------------------------------------
 dnl - Housekeeping plugin stuff
@@ -567,7 +552,6 @@ echo "
         Session tracking:         ${SESSION_TRACKING}
         LCMS DICT support:        ${have_new_lcms}
         IBus support:             ${enable_ibus}
-        Fcitx support:            ${enable_fcitx}
         Libnotify support:        ${have_libnotify}
         PackageKit support:       ${have_packagekit}
         Smartcard support:        ${have_smartcard_support}
