@@ -116,9 +116,16 @@ static const gchar introspection_xml[] =
 
 #define VOLUME_STEP 6           /* percents for one volume button press */
 
+#define ENV_GTK_IM_MODULE   "GTK_IM_MODULE"
+#define GTK_IM_MODULE_IBUS  "ibus"
+#define GTK_IM_MODULE_FCITX "fcitx"
+
 #define GNOME_DESKTOP_INPUT_SOURCES_DIR "org.gnome.desktop.input-sources"
 #define KEY_CURRENT_INPUT_SOURCE "current"
 #define KEY_INPUT_SOURCES        "sources"
+
+#define INPUT_SOURCE_TYPE_IBUS  "ibus"
+#define INPUT_SOURCE_TYPE_FCITX "fcitx"
 
 #define SYSTEMD_DBUS_NAME                       "org.freedesktop.login1"
 #define SYSTEMD_DBUS_PATH                       "/org/freedesktop/login1"
@@ -217,6 +224,9 @@ struct GsdMediaKeysManagerPrivate
         guint           unity_name_owner_id;
         guint           panel_name_owner_id;
         guint           have_legacy_keygrabber;
+
+        gboolean         is_ibus_active;
+        gboolean         is_fcitx_active;
 
         /* What did you plug in dialog */
         pa_backend      *wdypi_pa_backend;
@@ -2130,12 +2140,15 @@ static void
 do_switch_input_source_action (GsdMediaKeysManager *manager,
                                MediaKeyType         type)
 {
+        GsdMediaKeysManagerPrivate *priv = manager->priv;
         GSettings *settings;
         GVariant *sources;
+        const gchar *source_type;
+        guint first;
         gint i, n;
 
         if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "ubuntu") != 0)
-                if (!manager->priv->have_legacy_keygrabber)
+                if (!priv->have_legacy_keygrabber)
                         return;
 
         settings = g_settings_new (GNOME_DESKTOP_INPUT_SOURCES_DIR);
@@ -2146,18 +2159,24 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
                 goto out;
 
         i = g_settings_get_uint (settings, KEY_CURRENT_INPUT_SOURCE);
+        first = i;
 
-        if (type == SWITCH_INPUT_SOURCE_KEY)
-                i += 1;
-        else
-                i -= 1;
+        if (type == SWITCH_INPUT_SOURCE_KEY) {
+                do {
+                        i = (i + 1) % n;
+                        g_variant_get_child (sources, i, "(&s&s)", &source_type, NULL);
+                } while (i != first && ((g_str_equal (source_type, INPUT_SOURCE_TYPE_IBUS) && !priv->is_ibus_active) ||
+                                        (g_str_equal (source_type, INPUT_SOURCE_TYPE_FCITX) && !priv->is_fcitx_active)));
+        } else {
+                do {
+                        i = (i + n - 1) % n;
+                        g_variant_get_child (sources, i, "(&s&s)", &source_type, NULL);
+                } while (i != first && ((g_str_equal (source_type, INPUT_SOURCE_TYPE_IBUS) && !priv->is_ibus_active) ||
+                                        (g_str_equal (source_type, INPUT_SOURCE_TYPE_FCITX) && !priv->is_fcitx_active)));
+        }
 
-        if (i < 0)
-                i = n - 1;
-        else if (i >= n)
-                i = 0;
-
-        g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
+        if (i != first)
+                g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
 
  out:
         g_variant_unref (sources);
@@ -2926,10 +2945,19 @@ stop_legacy_grabber (GDBusConnection  *connection,
 static gboolean
 start_media_keys_idle_cb (GsdMediaKeysManager *manager)
 {
+        const gchar *module;
         char *theme_name;
 
         g_debug ("Starting media_keys manager");
         gnome_settings_profile_start (NULL);
+
+        module = g_getenv (ENV_GTK_IM_MODULE);
+#ifdef HAVE_IBUS
+        manager->priv->is_ibus_active = g_strcmp0 (module, GTK_IM_MODULE_IBUS) == 0;
+#endif
+#ifdef HAVE_FCITX
+        manager->priv->is_fcitx_active = g_strcmp0 (module, GTK_IM_MODULE_FCITX) == 0;
+#endif
 
         manager->priv->keys = g_ptr_array_new_with_free_func ((GDestroyNotify) media_key_free);
 

@@ -50,6 +50,10 @@
 #include <ibus.h>
 #endif
 
+#ifdef HAVE_FCITX
+#include <fcitx-gclient/fcitxinputmethod.h>
+#endif
+
 #include <act/act.h>
 
 #include "gnome-settings-session.h"
@@ -77,9 +81,11 @@
 
 #define GNOME_DESKTOP_INTERFACE_DIR "org.gnome.desktop.interface"
 
+#define ENV_GTK_IM_MODULE    "GTK_IM_MODULE"
 #define KEY_GTK_IM_MODULE    "gtk-im-module"
 #define GTK_IM_MODULE_SIMPLE "gtk-im-context-simple"
 #define GTK_IM_MODULE_IBUS   "ibus"
+#define GTK_IM_MODULE_FCITX  "fcitx"
 
 #define GNOME_DESKTOP_INPUT_SOURCES_DIR "org.gnome.desktop.input-sources"
 
@@ -87,8 +93,9 @@
 #define KEY_INPUT_SOURCES        "sources"
 #define KEY_KEYBOARD_OPTIONS     "xkb-options"
 
-#define INPUT_SOURCE_TYPE_XKB  "xkb"
-#define INPUT_SOURCE_TYPE_IBUS "ibus"
+#define INPUT_SOURCE_TYPE_XKB   "xkb"
+#define INPUT_SOURCE_TYPE_IBUS  "ibus"
+#define INPUT_SOURCE_TYPE_FCITX "fcitx"
 
 #define DEFAULT_LANGUAGE "en_US"
 #define DEFAULT_LAYOUT "us"
@@ -109,6 +116,12 @@ struct GsdKeyboardManagerPrivate
         IBusBus   *ibus;
         GHashTable *ibus_engines;
         GCancellable *ibus_cancellable;
+        gboolean is_ibus_active;
+#endif
+#ifdef HAVE_FCITX
+        FcitxInputMethod *fcitx;
+        GCancellable *fcitx_cancellable;
+        gboolean is_fcitx_active;
 #endif
         gint       xkb_event_base;
         GsdNumLockState old_state;
@@ -1104,7 +1117,9 @@ apply_input_source (GsdKeyboardManager *manager,
         priv->active_input_source = current;
 
 #ifdef HAVE_IBUS
-        maybe_start_ibus (manager);
+        if (priv->is_ibus_active) {
+                maybe_start_ibus (manager);
+        }
 #endif
 
         g_variant_get_child (sources, current, "(&s&s)", &type, &id);
@@ -1120,39 +1135,69 @@ apply_input_source (GsdKeyboardManager *manager,
                         g_warning ("Couldn't find XKB input source '%s'", id);
                         goto exit;
                 }
+
+#ifdef HAVE_FCITX
+                if (priv->is_fcitx_active && priv->fcitx) {
+                        fcitx_input_method_inactivate (priv->fcitx);
+                }
+#endif
+
 #ifdef HAVE_IBUS
-                set_gtk_im_module (manager, sources);
-                set_ibus_xkb_engine (manager);
+                if (priv->is_ibus_active) {
+                        set_gtk_im_module (manager, sources);
+                        set_ibus_xkb_engine (manager);
+                }
 #endif
         } else if (g_str_equal (type, INPUT_SOURCE_TYPE_IBUS)) {
 #ifdef HAVE_IBUS
-                IBusEngineDesc *engine_desc = NULL;
+                if (priv->is_ibus_active) {
+                        IBusEngineDesc *engine_desc = NULL;
 
-                if (priv->ibus_engines)
-                        engine_desc = g_hash_table_lookup (priv->ibus_engines, id);
-                else
-                        goto exit; /* we'll be called again when ibus is up and running */
+                        if (priv->ibus_engines)
+                                engine_desc = g_hash_table_lookup (priv->ibus_engines, id);
+                        else
+                                goto exit; /* we'll be called again when ibus is up and running */
 
-                if (engine_desc) {
-                        const gchar *ibus_layout;
-                        ibus_layout = ibus_engine_desc_get_layout (engine_desc);
+                        if (engine_desc) {
+                                const gchar *ibus_layout;
+                                ibus_layout = ibus_engine_desc_get_layout (engine_desc);
 
-                        if (ibus_layout) {
-                                layout = layout_from_ibus_layout (ibus_layout);
-                                variant = variant_from_ibus_layout (ibus_layout);
-                                options = options_from_ibus_layout (ibus_layout);
+                                if (ibus_layout) {
+                                        layout = layout_from_ibus_layout (ibus_layout);
+                                        variant = variant_from_ibus_layout (ibus_layout);
+                                        options = options_from_ibus_layout (ibus_layout);
+                                }
+                        } else {
+                                g_warning ("Couldn't find IBus input source '%s'", id);
+                                goto exit;
                         }
-                } else {
-                        g_warning ("Couldn't find IBus input source '%s'", id);
-                        goto exit;
-                }
 
-                /* NULL here is a shortcut for "I already know I
-                   need the IBus module". */
-                set_gtk_im_module (manager, NULL);
-                set_ibus_engine (manager, id);
+                        /* NULL here is a shortcut for "I already know I
+                           need the IBus module". */
+                        set_gtk_im_module (manager, NULL);
+                        set_ibus_engine (manager, id);
+                } else {
+                        g_warning ("IBus input source type specified but IBus is not active");
+                }
 #else
                 g_warning ("IBus input source type specified but IBus support was not compiled");
+#endif
+        } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+#ifdef HAVE_FCITX
+                if (priv->is_fcitx_active) {
+                        if (priv->fcitx) {
+                                gchar *name = g_strdup (id);
+                                fcitx_input_method_activate (priv->fcitx);
+                                fcitx_input_method_set_current_im (priv->fcitx, name);
+                                g_free (name);
+                        } else {
+                                g_warning ("Fcitx input method framework unavailable");
+                        }
+                } else {
+                        g_warning ("Fcitx input source type specified but Fcitx is not active");
+                }
+#else
+                g_warning ("Fcitx input source type specified but Fcitx support was not compiled");
 #endif
         } else {
                 g_warning ("Unknown input source type '%s'", type);
@@ -1169,6 +1214,50 @@ apply_input_source (GsdKeyboardManager *manager,
         return TRUE;
 }
 
+#ifdef HAVE_FCITX
+static void
+enable_fcitx_engines (GsdKeyboardManager *manager)
+{
+        GsdKeyboardManagerPrivate *priv = manager->priv;
+        GVariant *sources;
+        GPtrArray *engines;
+        GVariantIter iter;
+        const gchar *type;
+        const gchar *name;
+        gboolean changed = FALSE;
+
+        sources = g_settings_get_value (priv->input_sources_settings, KEY_INPUT_SOURCES);
+        engines = fcitx_input_method_get_imlist (priv->fcitx);
+
+        g_variant_iter_init (&iter, sources);
+        while (g_variant_iter_next (&iter, "(&s&s)", &type, &name)) {
+                if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+                        guint i;
+
+                        for (i = 0; i < engines->len; i++) {
+                                FcitxIMItem *engine = g_ptr_array_index (engines, i);
+
+                                if (g_str_equal (engine->unique_name, name)) {
+                                        if (!engine->enable) {
+                                                engine->enable = TRUE;
+                                                changed = TRUE;
+                                        }
+
+                                        break;
+                                }
+                        }
+                }
+        }
+
+        if (changed) {
+                fcitx_input_method_set_imlist (priv->fcitx, engines);
+        }
+
+        g_ptr_array_unref (engines);
+        g_variant_unref (sources);
+}
+#endif
+
 static gboolean
 apply_input_sources_settings (GSettings          *settings,
                               gpointer            keys,
@@ -1181,6 +1270,30 @@ apply_input_sources_settings (GSettings          *settings,
         guint current;
         ActUserManager *user_manager;
         gboolean user_manager_loaded;
+
+#ifdef HAVE_FCITX
+        if (priv->is_fcitx_active) {
+                gboolean sources_changed = FALSE;
+
+                if (keys) {
+                        GQuark *quarks = keys;
+                        gint i;
+
+                        for (i = 0; i < n_keys; i++) {
+                                if (quarks[i] == g_quark_try_string (KEY_INPUT_SOURCES)) {
+                                        sources_changed = TRUE;
+                                        break;
+                                }
+                        }
+                } else {
+                        sources_changed = TRUE;
+                }
+
+                if (sources_changed) {
+                        enable_fcitx_engines (manager);
+                }
+        }
+#endif
 
         sources = g_settings_get_value (priv->input_sources_settings, KEY_INPUT_SOURCES);
         n_sources = g_variant_n_children (sources);
@@ -1709,10 +1822,12 @@ handle_dbus_method_call (GDBusConnection       *connection,
         if (is_set_input_source || is_activate_input_source) {
                 if (priv->invocation) {
 #ifdef HAVE_IBUS
-                        /* This can only happen if there's an
-                         * ibus_bus_set_global_engine_async() call
-                         * going on. */
-                        g_cancellable_cancel (priv->ibus_cancellable);
+                        if (priv->is_ibus_active) {
+                                /* This can only happen if there's an
+                                 * ibus_bus_set_global_engine_async() call
+                                 * going on. */
+                                g_cancellable_cancel (priv->ibus_cancellable);
+                        }
 #endif
                         g_clear_pointer (&priv->invocation, set_input_source_return);
                         priv->pending_ops = 0;
@@ -1844,9 +1959,20 @@ out:
 static gboolean
 start_keyboard_idle_cb (GsdKeyboardManager *manager)
 {
+        const gchar *module;
+        GError *error = NULL;
+
         gnome_settings_profile_start (NULL);
 
         g_debug ("Starting keyboard manager");
+
+        module = g_getenv (ENV_GTK_IM_MODULE);
+#ifdef HAVE_IBUS
+        manager->priv->is_ibus_active = g_strcmp0 (module, GTK_IM_MODULE_IBUS) == 0;
+#endif
+#ifdef HAVE_FCITX
+        manager->priv->is_fcitx_active = g_strcmp0 (module, GTK_IM_MODULE_FCITX) == 0;
+#endif
 
         manager->priv->settings = g_settings_new (GSD_KEYBOARD_DIR);
 
@@ -1857,6 +1983,25 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
         manager->priv->input_sources_settings = g_settings_new (GNOME_DESKTOP_INPUT_SOURCES_DIR);
         manager->priv->interface_settings = g_settings_new (GNOME_DESKTOP_INTERFACE_DIR);
         manager->priv->xkb_info = gnome_xkb_info_new ();
+
+#ifdef HAVE_FCITX
+        if (manager->priv->is_fcitx_active) {
+                manager->priv->fcitx_cancellable = g_cancellable_new ();
+                manager->priv->fcitx = fcitx_input_method_new (G_BUS_TYPE_SESSION,
+                                                               G_DBUS_PROXY_FLAGS_NONE,
+                                                               0,
+                                                               manager->priv->fcitx_cancellable,
+                                                               &error);
+                g_clear_object (&manager->priv->fcitx_cancellable);
+
+                if (manager->priv->fcitx) {
+                        enable_fcitx_engines (manager);
+                } else {
+                        g_warning ("Fcitx input method framework unavailable: %s", error->message);
+                        g_error_free (error);
+                }
+        }
+#endif
 
         manager->priv->cancellable = g_cancellable_new ();
 
@@ -1934,8 +2079,21 @@ gsd_keyboard_manager_stop (GsdKeyboardManager *manager)
         g_clear_object (&p->xkb_info);
         g_clear_object (&p->localed);
 
+#ifdef HAVE_FCITX
+        if (p->is_fcitx_active) {
+                if (p->fcitx_cancellable) {
+                        g_cancellable_cancel (p->fcitx_cancellable);
+                }
+
+                g_clear_object (&p->fcitx_cancellable);
+                g_clear_object (&p->fcitx);
+        }
+#endif
+
 #ifdef HAVE_IBUS
-        clear_ibus (manager);
+        if (p->is_ibus_active) {
+                clear_ibus (manager);
+        }
 #endif
 
         if (p->device_manager != NULL) {
