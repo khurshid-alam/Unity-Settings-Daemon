@@ -97,6 +97,8 @@
 #define INPUT_SOURCE_TYPE_IBUS  "ibus"
 #define INPUT_SOURCE_TYPE_FCITX "fcitx"
 
+#define FCITX_XKB_PREFIX "fcitx-keyboard-"
+
 #define DEFAULT_LANGUAGE "en_US"
 #define DEFAULT_LAYOUT "us"
 
@@ -1138,7 +1140,9 @@ apply_input_source (GsdKeyboardManager *manager,
 
 #ifdef HAVE_FCITX
                 if (priv->is_fcitx_active && priv->fcitx) {
-                        fcitx_input_method_inactivate (priv->fcitx);
+                        gchar *name = g_strdup_printf (FCITX_XKB_PREFIX "%s", id);
+                        fcitx_input_method_set_current_im (priv->fcitx, name);
+                        g_free (name);
                 }
 #endif
 
@@ -1187,7 +1191,6 @@ apply_input_source (GsdKeyboardManager *manager,
                 if (priv->is_fcitx_active) {
                         if (priv->fcitx) {
                                 gchar *name = g_strdup (id);
-                                fcitx_input_method_activate (priv->fcitx);
                                 fcitx_input_method_set_current_im (priv->fcitx, name);
                                 g_free (name);
                         } else {
@@ -1219,23 +1222,48 @@ static void
 enable_fcitx_engines (GsdKeyboardManager *manager)
 {
         GsdKeyboardManagerPrivate *priv = manager->priv;
-        GVariant *sources;
         GPtrArray *engines;
+        GVariant *sources;
         GVariantIter iter;
         const gchar *type;
         const gchar *name;
-        gboolean changed = FALSE;
+        gboolean changed;
+        guint i;
+        guint j;
+
+        engines = fcitx_input_method_get_imlist (priv->fcitx);
+
+        if (!engines) {
+                g_warning ("Cannot update Fcitx engine list");
+                return;
+        }
 
         sources = g_settings_get_value (priv->input_sources_settings, KEY_INPUT_SOURCES);
-        engines = fcitx_input_method_get_imlist (priv->fcitx);
+        changed = FALSE;
+        i = 0;
 
         g_variant_iter_init (&iter, sources);
         while (g_variant_iter_next (&iter, "(&s&s)", &type, &name)) {
-                if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
-                        guint i;
+                if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
+                        for (j = i; j < engines->len; j++) {
+                                FcitxIMItem *engine = g_ptr_array_index (engines, j);
 
-                        for (i = 0; i < engines->len; i++) {
-                                FcitxIMItem *engine = g_ptr_array_index (engines, i);
+                                if (g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX) &&
+                                    g_str_equal (engine->unique_name + strlen (FCITX_XKB_PREFIX), name)) {
+                                        if (!engine->enable) {
+                                                engine->enable = TRUE;
+                                                changed = TRUE;
+                                        }
+
+                                        break;
+                                }
+                        }
+
+                        /* j is either the index of the engine "fcitx-keyboard-<name>"
+                         * or engines->len, meaning it wasn't found. */
+                } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+                        for (j = i; j < engines->len; j++) {
+                                FcitxIMItem *engine = g_ptr_array_index (engines, j);
 
                                 if (g_str_equal (engine->unique_name, name)) {
                                         if (!engine->enable) {
@@ -1246,6 +1274,35 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
                                         break;
                                 }
                         }
+
+                        /* j is either the index of the engine "<name>"
+                         * or engines->len, meaning it wasn't found. */
+                } else {
+                        continue;
+                }
+
+                if (j < engines->len) {
+                        if (j != i) {
+                                gpointer ptr = engines->pdata[i];
+                                engines->pdata[i] = engines->pdata[j];
+                                engines->pdata[j] = ptr;
+                                changed = TRUE;
+                        }
+
+                        i++;
+                } else {
+                        g_warning ("Fcitx engine not found for %s", name);
+                }
+        }
+
+        /* we should have i enabled fcitx engines: disable everything else. */
+
+        for (; i < engines->len; i++) {
+                FcitxIMItem *engine = g_ptr_array_index (engines, i);
+
+                if (engine->enable) {
+                        engine->enable = FALSE;
+                        changed = TRUE;
                 }
         }
 
@@ -1253,8 +1310,8 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
                 fcitx_input_method_set_imlist (priv->fcitx, engines);
         }
 
-        g_ptr_array_unref (engines);
         g_variant_unref (sources);
+        g_ptr_array_unref (engines);
 }
 #endif
 
