@@ -1095,6 +1095,20 @@ manager_notify_is_loaded_cb (GObject    *object,
         }
 }
 
+static gchar *
+get_fcitx_name (gchar *name)
+{
+        gchar *i;
+
+        for (i = name; *i; i++) {
+                if (*i == '+') {
+                        *i = '-';
+                }
+        }
+
+        return name;
+}
+
 static gboolean
 apply_input_source (GsdKeyboardManager *manager,
                     guint               current)
@@ -1140,7 +1154,7 @@ apply_input_source (GsdKeyboardManager *manager,
 
 #ifdef HAVE_FCITX
                 if (priv->is_fcitx_active && priv->fcitx) {
-                        gchar *name = g_strdup_printf (FCITX_XKB_PREFIX "%s", id);
+                        gchar *name = get_fcitx_name (g_strdup_printf (FCITX_XKB_PREFIX "%s", id));
                         fcitx_input_method_activate (priv->fcitx);
                         fcitx_input_method_set_current_im (priv->fcitx, name);
                         g_free (name);
@@ -1247,11 +1261,13 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
         g_variant_iter_init (&iter, sources);
         while (g_variant_iter_next (&iter, "(&s&s)", &type, &name)) {
                 if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
+                        gchar *fixed_name = get_fcitx_name (g_strdup (name));
+
                         for (j = i; j < engines->len; j++) {
                                 FcitxIMItem *engine = g_ptr_array_index (engines, j);
 
                                 if (g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX) &&
-                                    g_str_equal (engine->unique_name + strlen (FCITX_XKB_PREFIX), name)) {
+                                    g_str_equal (engine->unique_name + strlen (FCITX_XKB_PREFIX), fixed_name)) {
                                         if (!engine->enable) {
                                                 engine->enable = TRUE;
                                                 changed = TRUE;
@@ -1260,6 +1276,8 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
                                         break;
                                 }
                         }
+
+                        g_free (fixed_name);
 
                         /* j is either the index of the engine "fcitx-keyboard-<name>"
                          * or engines->len, meaning it wasn't found. */
