@@ -2033,6 +2033,73 @@ out:
         register_manager_dbus (manager);
 }
 
+#ifdef HAVE_FCITX
+static gboolean
+input_source_is_fcitx_engine (const gchar *type,
+                              const gchar *name,
+                              const gchar *engine)
+{
+        if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
+                if (g_str_has_prefix (engine, FCITX_XKB_PREFIX)) {
+                        gboolean equal;
+                        gchar *fixed_name = get_fcitx_name (g_strdup (name));
+                        equal = g_str_equal (fixed_name, engine + strlen (FCITX_XKB_PREFIX));
+                        g_free (fixed_name);
+                        return equal;
+                }
+        } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+                return g_str_equal (name, engine);
+        }
+
+        return FALSE;
+}
+
+static void
+fcitx_engine_changed (GsdKeyboardManager *manager,
+                      GParamSpec         *pspec,
+                      FcitxInputMethod   *fcitx)
+{
+        GSettings *settings = manager->priv->input_sources_settings;
+        gchar *engine = fcitx_input_method_get_current_im (manager->priv->fcitx);
+
+        if (engine) {
+                GVariant *sources = g_settings_get_value (settings, KEY_INPUT_SOURCES);
+                guint current = g_settings_get_uint (settings, KEY_CURRENT_INPUT_SOURCE);
+                gboolean update = TRUE;
+
+                if (current >= 0 && current < g_variant_n_children (sources)) {
+                        const gchar *type;
+                        const gchar *name;
+
+                        g_variant_get_child (sources, current, "(&s&s)", &type, &name);
+                        update = !input_source_is_fcitx_engine (type, name, engine);
+                }
+
+                if (update) {
+                        gsize i;
+
+                        for (i = 0; i < g_variant_n_children (sources); i++) {
+                                const gchar *type;
+                                const gchar *name;
+
+                                if (i == current)
+                                        continue;
+
+                                g_variant_get_child (sources, i, "(&s&s)", &type, &name);
+
+                                if (input_source_is_fcitx_engine (type, name, engine)) {
+                                        g_settings_set_uint (settings, KEY_CURRENT_INPUT_SOURCE, i);
+                                        break;
+                                }
+                        }
+                }
+
+                g_variant_unref (sources);
+                g_free (engine);
+        }
+}
+#endif
+
 static gboolean
 start_keyboard_idle_cb (GsdKeyboardManager *manager)
 {
@@ -2065,7 +2132,7 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
         if (manager->priv->is_fcitx_active) {
                 manager->priv->fcitx_cancellable = g_cancellable_new ();
                 manager->priv->fcitx = fcitx_input_method_new (G_BUS_TYPE_SESSION,
-                                                               G_DBUS_PROXY_FLAGS_NONE,
+                                                               G_DBUS_PROXY_FLAGS_GET_INVALIDATED_PROPERTIES,
                                                                0,
                                                                manager->priv->fcitx_cancellable,
                                                                &error);
@@ -2073,6 +2140,7 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
 
                 if (manager->priv->fcitx) {
                         enable_fcitx_engines (manager);
+                        g_signal_connect_swapped (manager->priv->fcitx, "notify::current-im", G_CALLBACK (fcitx_engine_changed), manager);
                 } else {
                         g_warning ("Fcitx input method framework unavailable: %s", error->message);
                         g_error_free (error);
