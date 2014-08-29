@@ -530,6 +530,7 @@ plugins/xsettings/Makefile
 data/Makefile
 data/unity-settings-daemon.pc
 data/unity-settings-daemon-uninstalled.pc
+data/libunity-settings-daemon.pc
 po/Makefile.in
 man/Makefile
 tests/Makefile

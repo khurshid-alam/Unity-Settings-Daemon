@@ -39,7 +39,7 @@ libunity_settings_daemon_include_HEADERS =		\
 	gsd-rr-config.h \
 	gsd-idle-monitor.h
 
-libunity_settings_daemon_includedir = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/unity-settings-daemon
+libunity_settings_daemon_includedir = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/libunity-settings-daemon
 
 libunity_settings_daemon_la_CFLAGS = 		\
 	-DLIBEXECDIR=\""$(libexecdir)\""			\
