@@ -52,7 +52,8 @@ libunity_settings_daemon_la_LIBADD = 		\
 	$(LIBUNITY_SETTINGS_DAEMON_LIBS)
 
 libunity_settings_daemon_la_LDFLAGS = 		\
-	-version-info 1:0:0
+	-version-info 1:0:0 \
+	-export-symbols-regex \^gsd_.*
 
 check_gl_texture_size_CPPFLAGS = \
 	$(CHECK_GL_TEXTURE_SIZE_CFLAGS)
