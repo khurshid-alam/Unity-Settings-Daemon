@@ -31,7 +31,7 @@ libgsdwacom_la_LDFLAGS =		\
 
 libgsdwacom_la_LIBADD  =						\
 	$(top_builddir)/plugins/common/libcommon.la			\
-	$(top_builddir)/gnome-settings-daemon/librr.la			\
+	$(top_builddir)/gnome-settings-daemon/libunity-settings-daemon.la			\
 	$(SETTINGS_PLUGIN_LIBS)						\
 	$(WACOM_LIBS)
 
@@ -104,7 +104,7 @@ usd_test_wacom_CFLAGS =			\
 usd_test_wacom_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
-	$(top_builddir)/gnome-settings-daemon/librr.la		\
+	$(top_builddir)/gnome-settings-daemon/libunity-settings-daemon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
 	$(SETTINGS_PLUGIN_LIBS)					\
 	$(WACOM_LIBS)						\
@@ -133,7 +133,7 @@ usd_list_wacom_CFLAGS =			\
 usd_list_wacom_LDADD =						\
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
-	$(top_builddir)/gnome-settings-daemon/librr.la		\
+	$(top_builddir)/gnome-settings-daemon/libunity-settings-daemon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
 	$(SETTINGS_PLUGIN_LIBS)					\
 	$(WACOM_LIBS)						\
@@ -166,7 +166,7 @@ usd_test_wacom_osd_CFLAGS =					\
 usd_test_wacom_osd_LDADD = \
 	$(top_builddir)/gnome-settings-daemon/libgsd.la		\
 	$(top_builddir)/plugins/common/libcommon.la		\
-	$(top_builddir)/gnome-settings-daemon/librr.la		\
+	$(top_builddir)/gnome-settings-daemon/libunity-settings-daemon.la		\
 	$(SETTINGS_DAEMON_LIBS)					\
 	$(SETTINGS_PLUGIN_LIBS)					\
 	$(WACOM_LIBS)						\

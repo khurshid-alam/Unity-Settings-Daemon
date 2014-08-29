@@ -15,10 +15,10 @@ INCLUDES = \
 
 privlibdir = $(pkglibdir)-$(GSD_API_VERSION)
 
-noinst_LTLIBRARIES = librr.la
+lib_LTLIBRARIES = libunity-settings-daemon.la
 libexec_PROGRAMS = check_gl_texture_size
 
-librr_la_SOURCES =		\
+libunity_settings_daemon_la_SOURCES =		\
 	gsd-pnp-ids.c \
 	gsd-pnp-ids.h \
 	gsd-rr.c \
@@ -29,17 +29,30 @@ librr_la_SOURCES =		\
 	gsd-rr-private.h \
 	display-name.c \
 	edid-parse.c \
-	edid.h
+	edid.h \
+	gsd-idle-monitor.c \
+	gsd-idle-monitor.h
 
-librr_la_CFLAGS = 		\
+libunity_settings_daemon_include_HEADERS =		\
+	gsd-pnp-ids.h \
+	gsd-rr.h \
+	gsd-rr-config.h \
+	gsd-idle-monitor.h
+
+libunity_settings_daemon_includedir = $(includedir)/unity-settings-daemon-$(GSD_API_VERSION)/unity-settings-daemon
+
+libunity_settings_daemon_la_CFLAGS = 		\
 	-DLIBEXECDIR=\""$(libexecdir)\""			\
 	-DPNP_IDS=\""$(datadir)/hwdata/pnp.ids"\"			\
 	-DGNOMELOCALEDIR=\""$(datadir)/locale"\"        \
-	$(LIBRR_CFLAGS)
+	$(LIBUNITY_SETTINGS_DAEMON_CFLAGS)
 
-librr_la_LIBADD = 		\
+libunity_settings_daemon_la_LIBADD = 		\
 	-lm \
-	$(LIBRR_LIBS)
+	$(LIBUNITY_SETTINGS_DAEMON_LIBS)
+
+libunity_settings_daemon_la_LDFLAGS = 		\
+	-version-info 1:0:0
 
 check_gl_texture_size_CPPFLAGS = \
 	$(CHECK_GL_TEXTURE_SIZE_CFLAGS)
@@ -66,7 +79,6 @@ libgsd_la_CFLAGS =		\
 	$(NULL)
 
 libgsd_la_LIBADD =		\
-	librr.la			\
 	$(SETTINGS_DAEMON_LIBS)		\
 	$(GIOUNIX_LIBS)		\
 	$(NULL)
@@ -118,6 +130,7 @@ unity_settings_daemon_LDFLAGS = 	\
 
 unity_settings_daemon_LDADD = 		\
 	libgsd.la		\
+	libunity-settings-daemon.la		\
 	$(SETTINGS_DAEMON_LIBS)		\
 	$(LIBNOTIFY_LIBS)		\
 	$(GNOME_DESKTOP_LIBS)		\

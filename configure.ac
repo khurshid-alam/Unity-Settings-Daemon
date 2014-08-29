@@ -142,10 +142,10 @@ dnl ---------------------------------------------------------------------------
 PKG_CHECK_MODULES(COMMON, x11 kbproto xi)
 
 dnl ---------------------------------------------------------------------------
-dnl - librr
+dnl - libunity-settings-daemon
 dnl ---------------------------------------------------------------------------
 
-PKG_CHECK_MODULES(LIBRR, gtk+-3.0 >= $GTK_REQUIRED_VERSION xrandr >= $XRANDR_REQUIRED_VERSION xext >= $XEXT_REQUIRED_VERSION)
+PKG_CHECK_MODULES(LIBUNITY_SETTINGS_DAEMON, gtk+-3.0 >= $GTK_REQUIRED_VERSION xrandr >= $XRANDR_REQUIRED_VERSION xext >= $XEXT_REQUIRED_VERSION)
 PKG_CHECK_MODULES(CHECK_GL_TEXTURE_SIZE, gl x11)
 
 dnl ---------------------------------------------------------------------------
