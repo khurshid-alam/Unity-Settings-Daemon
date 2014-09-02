@@ -1096,17 +1096,33 @@ manager_notify_is_loaded_cb (GObject    *object,
 }
 
 static gchar *
-get_fcitx_name (gchar *name)
+get_xkb_name (const gchar *name)
 {
-        gchar *i;
+        gchar *xkb_name;
+        gchar *separator;
 
-        for (i = name; *i; i++) {
-                if (*i == '+') {
-                        *i = '-';
-                }
-        }
+        if (g_str_has_prefix (name, FCITX_XKB_PREFIX))
+                name += strlen (FCITX_XKB_PREFIX);
 
-        return name;
+        xkb_name = g_strdup (name);
+        separator = strchr (xkb_name, '-');
+
+        if (separator)
+                *separator = '+';
+
+        return xkb_name;
+}
+
+static gchar *
+get_fcitx_name (const gchar *name)
+{
+        gchar *fcitx_name = g_strdup (name);
+        gchar *separator = strchr (fcitx_name, '+');
+
+        if (separator)
+                *separator = '-';
+
+        return fcitx_name;
 }
 
 static gboolean
@@ -1154,9 +1170,11 @@ apply_input_source (GsdKeyboardManager *manager,
 
 #ifdef HAVE_FCITX
                 if (priv->is_fcitx_active && priv->fcitx) {
-                        gchar *name = get_fcitx_name (g_strdup_printf (FCITX_XKB_PREFIX "%s", id));
+                        gchar *name = g_strdup_printf (FCITX_XKB_PREFIX "%s", id);
+                        gchar *fcitx_name = get_fcitx_name (name);
                         fcitx_input_method_activate (priv->fcitx);
-                        fcitx_input_method_set_current_im (priv->fcitx, name);
+                        fcitx_input_method_set_current_im (priv->fcitx, fcitx_name);
+                        g_free (fcitx_name);
                         g_free (name);
                 }
 #endif
@@ -1261,13 +1279,13 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
         g_variant_iter_init (&iter, sources);
         while (g_variant_iter_next (&iter, "(&s&s)", &type, &name)) {
                 if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
-                        gchar *fixed_name = get_fcitx_name (g_strdup (name));
+                        gchar *fcitx_name = get_fcitx_name (name);
 
                         for (j = i; j < engines->len; j++) {
                                 FcitxIMItem *engine = g_ptr_array_index (engines, j);
 
                                 if (g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX) &&
-                                    g_str_equal (engine->unique_name + strlen (FCITX_XKB_PREFIX), fixed_name)) {
+                                    g_str_equal (engine->unique_name + strlen (FCITX_XKB_PREFIX), fcitx_name)) {
                                         if (!engine->enable) {
                                                 engine->enable = TRUE;
                                                 changed = TRUE;
@@ -1277,7 +1295,7 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
                                 }
                         }
 
-                        g_free (fixed_name);
+                        g_free (fcitx_name);
 
                         /* j is either the index of the engine "fcitx-keyboard-<name>"
                          * or engines->len, meaning it wasn't found. */
@@ -1332,6 +1350,131 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
 
         g_variant_unref (sources);
         g_ptr_array_unref (engines);
+}
+
+static gboolean
+input_source_is_fcitx_engine (const gchar *type,
+                              const gchar *name,
+                              const gchar *engine)
+{
+        if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
+                if (g_str_has_prefix (engine, FCITX_XKB_PREFIX)) {
+                        gboolean equal;
+                        gchar *fcitx_name = get_fcitx_name (name);
+                        equal = g_str_equal (fcitx_name, engine + strlen (FCITX_XKB_PREFIX));
+                        g_free (fcitx_name);
+                        return equal;
+                }
+        } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+                return g_str_equal (name, engine);
+        }
+
+        return FALSE;
+}
+
+static gboolean
+should_update_input_sources (GVariant  *sources,
+                             GPtrArray *engines)
+{
+        GVariantIter iter;
+        const gchar *type;
+        const gchar *name;
+        guint i = 0;
+
+        g_variant_iter_init (&iter, sources);
+        while (g_variant_iter_next (&iter, "(&s&s)", &type, &name)) {
+                if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB) ||
+                    g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
+                        FcitxIMItem *engine;
+
+                        /* get the next enabled fcitx engine */
+                        for (; i < engines->len; i++) {
+                                engine = g_ptr_array_index (engines, i);
+
+                                if (engine->enable)
+                                        break;
+                        }
+
+                        /* there should be an enabled engine and it should match, otherwise we need to update */
+                        if (i++ >= engines->len || !input_source_is_fcitx_engine (type, name, engine->unique_name))
+                                return TRUE;
+                }
+        }
+
+        /* if there are more enabled engines, we need to update */
+        for (; i < engines->len; i++) {
+                FcitxIMItem *engine = g_ptr_array_index (engines, i);
+
+                if (engine->enable)
+                        return TRUE;
+        }
+
+        return FALSE;
+}
+
+static void
+update_input_sources_from_fcitx_engines (GsdKeyboardManager *manager,
+                                         FcitxInputMethod   *fcitx)
+{
+        GPtrArray *engines = fcitx_input_method_get_imlist (manager->priv->fcitx);
+
+        if (engines) {
+                GVariant *sources = g_settings_get_value (manager->priv->input_sources_settings, KEY_INPUT_SOURCES);
+
+                if (should_update_input_sources (sources, engines)) {
+                        GVariantBuilder builder;
+                        gboolean update = FALSE;
+                        guint i;
+
+                        g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(ss)"));
+
+                        for (i = 0; i < engines->len; i++) {
+                                FcitxIMItem *engine = g_ptr_array_index (engines, i);
+
+                                if (engine->enable) {
+                                        if (g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX)) {
+                                                gchar *name = get_xkb_name (engine->unique_name);
+                                                g_variant_builder_add (&builder, "(ss)", INPUT_SOURCE_TYPE_XKB, name);
+                                                g_free (name);
+                                        } else {
+                                                g_variant_builder_add (&builder, "(ss)", INPUT_SOURCE_TYPE_FCITX, engine->unique_name);
+                                        }
+
+                                        update = TRUE;
+                                }
+                        }
+
+                        if (update)
+                                g_settings_set_value (manager->priv->input_sources_settings, KEY_INPUT_SOURCES, g_variant_builder_end (&builder));
+                        else
+                                g_variant_builder_clear (&builder);
+                }
+
+                g_variant_unref (sources);
+                g_ptr_array_unref (engines);
+        }
+}
+
+static void
+migrate_fcitx_engines (GsdKeyboardManager *manager)
+{
+        GPtrArray *engines = fcitx_input_method_get_imlist (manager->priv->fcitx);
+
+        if (engines) {
+                gboolean migrate = engines->len > 1;
+
+                if (engines->len == 1) {
+                        FcitxIMItem *engine = g_ptr_array_index (engines, 0);
+                        migrate = !g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX);
+                }
+
+                if (migrate)
+                        update_input_sources_from_fcitx_engines (manager, manager->priv->fcitx);
+                else
+                        enable_fcitx_engines (manager);
+
+                g_ptr_array_unref (engines);
+        }
 }
 #endif
 
@@ -1737,11 +1880,10 @@ convert_libgnomekbd_layouts (GSettings *settings)
         g_object_unref (libgnomekbd_settings);
 }
 
-static void
-maybe_convert_old_settings (GSettings *settings)
+static gboolean
+should_migrate (const gchar *id)
 {
-        GVariant *sources;
-        gchar **options;
+        gboolean migrate = FALSE;
         gchar *stamp_dir_path = NULL;
         gchar *stamp_file_path = NULL;
         GError *error = NULL;
@@ -1752,23 +1894,11 @@ maybe_convert_old_settings (GSettings *settings)
                 goto out;
         }
 
-        stamp_file_path = g_build_filename (stamp_dir_path, "input-sources-converted", NULL);
+        stamp_file_path = g_build_filename (stamp_dir_path, id, NULL);
         if (g_file_test (stamp_file_path, G_FILE_TEST_EXISTS))
                 goto out;
 
-        sources = g_settings_get_value (settings, KEY_INPUT_SOURCES);
-        if (g_variant_n_children (sources) < 1) {
-                convert_libgnomekbd_layouts (settings);
-#ifdef HAVE_IBUS
-                convert_ibus (settings);
-#endif
-        }
-        g_variant_unref (sources);
-
-        options = g_settings_get_strv (settings, KEY_KEYBOARD_OPTIONS);
-        if (g_strv_length (options) < 1)
-                convert_libgnomekbd_options (settings);
-        g_strfreev (options);
+        migrate = TRUE;
 
         if (!g_file_set_contents (stamp_file_path, "", 0, &error)) {
                 g_warning ("%s", error->message);
@@ -1777,6 +1907,30 @@ maybe_convert_old_settings (GSettings *settings)
 out:
         g_free (stamp_file_path);
         g_free (stamp_dir_path);
+        return migrate;
+}
+
+static void
+maybe_convert_old_settings (GSettings *settings)
+{
+        if (should_migrate ("input-sources-converted")) {
+                GVariant *sources;
+                gchar **options;
+
+                sources = g_settings_get_value (settings, KEY_INPUT_SOURCES);
+                if (g_variant_n_children (sources) < 1) {
+                        convert_libgnomekbd_layouts (settings);
+#ifdef HAVE_IBUS
+                        convert_ibus (settings);
+#endif
+                }
+                g_variant_unref (sources);
+
+                options = g_settings_get_strv (settings, KEY_KEYBOARD_OPTIONS);
+                if (g_strv_length (options) < 1)
+                        convert_libgnomekbd_options (settings);
+                g_strfreev (options);
+        }
 }
 
 static void
@@ -2034,26 +2188,6 @@ out:
 }
 
 #ifdef HAVE_FCITX
-static gboolean
-input_source_is_fcitx_engine (const gchar *type,
-                              const gchar *name,
-                              const gchar *engine)
-{
-        if (g_str_equal (type, INPUT_SOURCE_TYPE_XKB)) {
-                if (g_str_has_prefix (engine, FCITX_XKB_PREFIX)) {
-                        gboolean equal;
-                        gchar *fixed_name = get_fcitx_name (g_strdup (name));
-                        equal = g_str_equal (fixed_name, engine + strlen (FCITX_XKB_PREFIX));
-                        g_free (fixed_name);
-                        return equal;
-                }
-        } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
-                return g_str_equal (name, engine);
-        }
-
-        return FALSE;
-}
-
 static void
 fcitx_engine_changed (GsdKeyboardManager *manager,
                       GParamSpec         *pspec,
@@ -2139,8 +2273,13 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
                 g_clear_object (&manager->priv->fcitx_cancellable);
 
                 if (manager->priv->fcitx) {
-                        enable_fcitx_engines (manager);
+                        if (should_migrate ("fcitx-engines-migrated"))
+                                migrate_fcitx_engines (manager);
+                        else
+                                enable_fcitx_engines (manager);
+
                         g_signal_connect_swapped (manager->priv->fcitx, "notify::current-im", G_CALLBACK (fcitx_engine_changed), manager);
+                        g_signal_connect_swapped (manager->priv->fcitx, "imlist-changed", G_CALLBACK (update_input_sources_from_fcitx_engines), manager);
                 } else {
                         g_warning ("Fcitx input method framework unavailable: %s", error->message);
                         g_error_free (error);
