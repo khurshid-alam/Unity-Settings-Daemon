@@ -1252,8 +1252,15 @@ apply_input_source (GsdKeyboardManager *manager,
 }
 
 #ifdef HAVE_FCITX
+static const gchar *
+get_fcitx_engine_for_ibus_engine (const gchar *engine)
+{
+        return NULL;
+}
+
 static void
-enable_fcitx_engines (GsdKeyboardManager *manager)
+enable_fcitx_engines (GsdKeyboardManager *manager,
+                      gboolean            migrate)
 {
         GsdKeyboardManagerPrivate *priv = manager->priv;
         GPtrArray *engines;
@@ -1298,6 +1305,27 @@ enable_fcitx_engines (GsdKeyboardManager *manager)
                         g_free (fcitx_name);
 
                         /* j is either the index of the engine "fcitx-keyboard-<name>"
+                         * or engines->len, meaning it wasn't found. */
+                } else if (migrate && g_str_equal (type, INPUT_SOURCE_TYPE_IBUS)) {
+                        const gchar *fcitx_name = get_fcitx_engine_for_ibus_engine (name);
+
+                        if (!fcitx_name)
+                                continue;
+
+                        for (j = i; j < engines->len; j++) {
+                                FcitxIMItem *engine = g_ptr_array_index (engines, j);
+
+                                if (g_str_equal (engine->unique_name, fcitx_name)) {
+                                        if (!engine->enable) {
+                                                engine->enable = TRUE;
+                                                changed = TRUE;
+                                        }
+
+                                        break;
+                                }
+                        }
+
+                        /* j is either the index of the engine "<name>"
                          * or engines->len, meaning it wasn't found. */
                 } else if (g_str_equal (type, INPUT_SOURCE_TYPE_FCITX)) {
                         for (j = i; j < engines->len; j++) {
@@ -1461,17 +1489,32 @@ migrate_fcitx_engines (GsdKeyboardManager *manager)
         GPtrArray *engines = fcitx_input_method_get_imlist (manager->priv->fcitx);
 
         if (engines) {
-                gboolean migrate = engines->len > 1;
+                gboolean migrate = FALSE;
+                gboolean second = FALSE;
+                guint i;
 
-                if (engines->len == 1) {
-                        FcitxIMItem *engine = g_ptr_array_index (engines, 0);
-                        migrate = !g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX);
+                /* Migrate if there are at least two enabled fcitx engines or
+                 * there is one fcitx engine which is not a keyboard layout.
+                 * These are our criteria for determining which direction to
+                 * sync fcitx engines with input sources. */
+
+                for (i = 0; i < engines->len; i++) {
+                        FcitxIMItem *engine = g_ptr_array_index (engines, i);
+
+                        if (engine->enable) {
+                                if (second || !g_str_has_prefix (engine->unique_name, FCITX_XKB_PREFIX)) {
+                                        migrate = TRUE;
+                                        break;
+                                }
+
+                                second = TRUE;
+                        }
                 }
 
                 if (migrate)
                         update_input_sources_from_fcitx_engines (manager, manager->priv->fcitx);
                 else
-                        enable_fcitx_engines (manager);
+                        enable_fcitx_engines (manager, TRUE);
 
                 g_ptr_array_unref (engines);
         }
@@ -1510,7 +1553,7 @@ apply_input_sources_settings (GSettings          *settings,
                 }
 
                 if (sources_changed) {
-                        enable_fcitx_engines (manager);
+                        enable_fcitx_engines (manager, FALSE);
                 }
         }
 #endif
@@ -2276,7 +2319,7 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
                         if (should_migrate ("fcitx-engines-migrated"))
                                 migrate_fcitx_engines (manager);
                         else
-                                enable_fcitx_engines (manager);
+                                enable_fcitx_engines (manager, FALSE);
 
                         g_signal_connect_swapped (manager->priv->fcitx, "notify::current-im", G_CALLBACK (fcitx_engine_changed), manager);
                         g_signal_connect_swapped (manager->priv->fcitx, "imlist-changed", G_CALLBACK (update_input_sources_from_fcitx_engines), manager);
