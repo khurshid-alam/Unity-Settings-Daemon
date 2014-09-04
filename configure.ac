@@ -204,6 +204,11 @@ AC_ARG_ENABLE(fcitx,
 if test "x$enable_fcitx" = "xyes" ; then
         FCITX_MODULE="fcitx-gclient"
         AC_DEFINE(HAVE_FCITX, 1, [Defined if Fcitx support is enabled])
+
+        AC_CHECK_PROG(HAVE_GPERF, gperf, yes)
+        if test "x$HAVE_GPERF" != "xyes" ; then
+                AC_MSG_ERROR([gperf needed for Fcitx support])
+        fi
 else
         FCITX_MODULE=
 fi
