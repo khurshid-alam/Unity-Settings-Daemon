@@ -62,6 +62,10 @@
 #include "gsd-input-helper.h"
 #include "gsd-enums.h"
 
+#ifdef HAVE_FCITX
+#include "input-method-engines.c"
+#endif
+
 #define GSD_KEYBOARD_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GSD_TYPE_KEYBOARD_MANAGER, GsdKeyboardManagerPrivate))
 
 #define GSD_KEYBOARD_DIR "org.gnome.settings-daemon.peripherals.keyboard"
@@ -1253,9 +1257,16 @@ apply_input_source (GsdKeyboardManager *manager,
 
 #ifdef HAVE_FCITX
 static const gchar *
-get_fcitx_engine_for_ibus_engine (const gchar *engine)
+get_fcitx_engine_for_ibus_engine (const gchar *ibus_engine)
 {
-        return NULL;
+        const struct Engine *engine;
+
+        if (!ibus_engine)
+                return NULL;
+
+        engine = get_engine_for_ibus_engine (ibus_engine, strlen (ibus_engine));
+
+        return engine ? engine->fcitx_engine : NULL;
 }
 
 static void
