@@ -1100,6 +1100,7 @@ manager_notify_is_loaded_cb (GObject    *object,
         }
 }
 
+#ifdef HAVE_FCITX
 static gchar *
 get_xkb_name (const gchar *name)
 {
@@ -1130,7 +1131,6 @@ get_fcitx_name (const gchar *name)
         return fcitx_name;
 }
 
-#ifdef HAVE_FCITX
 static gboolean
 input_source_is_fcitx_engine (const gchar *type,
                               const gchar *name,
