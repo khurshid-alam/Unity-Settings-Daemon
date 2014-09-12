@@ -244,6 +244,7 @@ static void      do_lid_closed_action (GsdPowerManager *manager);
 static void      inhibit_lid_switch (GsdPowerManager *manager);
 static void      uninhibit_lid_switch (GsdPowerManager *manager);
 static void      main_battery_or_ups_low_changed (GsdPowerManager *manager, gboolean is_low);
+static void      device_properties_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager);
 static gboolean  idle_is_session_inhibited (GsdPowerManager *manager, guint mask, gboolean *is_inhibited);
 static void      idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode);
 static void      idle_triggered_idle_cb (GnomeIdleMonitor *monitor, guint watch_id, gpointer user_data);
@@ -1038,6 +1039,13 @@ engine_device_add (GsdPowerManager *manager, UpDevice *device)
                                    GUINT_TO_POINTER(state));
         }
 
+        g_ptr_array_add (manager->priv->devices_array, g_object_ref(device));
+
+        g_signal_connect (device, "notify::state",
+                          G_CALLBACK (device_properties_changed_cb), manager);
+        g_signal_connect (device, "notify::warning-level",
+                          G_CALLBACK (device_properties_changed_cb), manager);
+
         /* the device is recalled */
         if (recall_notice)
                 device_perhaps_recall (manager, device);
@@ -1085,14 +1093,6 @@ engine_coldplug (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        /* get devices from UPower */
-        ret = up_client_enumerate_devices_sync (manager->priv->up_client, NULL, &error);
-        if (!ret) {
-                g_warning ("failed to get device list: %s", error->message);
-                g_error_free (error);
-                goto out;
-        }
-
         engine_recalculate_state (manager);
 
         /* add to database */
@@ -1123,13 +1123,18 @@ engine_device_added_cb (UpClient *client, UpDevice *device, GsdPowerManager *man
 }
 
 static void
-engine_device_removed_cb (UpClient *client, UpDevice *device, GsdPowerManager *manager)
+engine_device_removed_cb (UpClient *client, const char *object_path, GsdPowerManager *manager)
 {
-        gboolean ret;
-        ret = g_ptr_array_remove (manager->priv->devices_array, device);
-        if (!ret)
-                return;
-        engine_recalculate_state (manager);
+        guint i;
+
+        for (i = 0; i < manager->priv->devices_array->len; i++) {
+                UpDevice *device = g_ptr_array_index (manager->priv->devices_array, i);
+
+                if (g_strcmp0 (object_path, up_device_get_object_path (device)) == 0) {
+                        g_ptr_array_remove_index (manager->priv->devices_array, i);
+                        break;
+                }
+        }
 }
 
 static void
@@ -1245,17 +1250,38 @@ manager_critical_action_get (GsdPowerManager *manager,
                              gboolean         is_ups)
 {
         GsdPowerActionType policy;
+        GVariant *result = NULL;
 
         policy = g_settings_get_enum (manager->priv->settings, "critical-battery-action");
+
         if (policy == GSD_POWER_ACTION_SUSPEND) {
-                if (is_ups == FALSE &&
-                    up_client_get_can_suspend (manager->priv->up_client))
-                        return policy;
-                return GSD_POWER_ACTION_SHUTDOWN;
+                if (is_ups == FALSE) {
+                        result = g_dbus_proxy_call_sync (manager->priv->logind_proxy,
+                                                         "CanSuspend",
+                                                         NULL,
+                                                         G_DBUS_CALL_FLAGS_NONE,
+                                                         -1, NULL, NULL);
+                }
         } else if (policy == GSD_POWER_ACTION_HIBERNATE) {
-                if (up_client_get_can_hibernate (manager->priv->up_client))
-                        return policy;
-                return GSD_POWER_ACTION_SHUTDOWN;
+                result = g_dbus_proxy_call_sync (manager->priv->logind_proxy,
+                                                 "CanHibernate",
+                                                 NULL,
+                                                 G_DBUS_CALL_FLAGS_NONE,
+                                                 -1, NULL, NULL);
+        } else {
+                /* Other actions need no check */
+                return policy;
+        }
+
+        if (result) {
+                const char *s;
+
+                g_variant_get (result, "(s)", &s);
+                if (g_strcmp0 (s, "yes") != 0)
+                        policy = GSD_POWER_ACTION_SHUTDOWN;
+                g_variant_unref (result);
+        } else {
+                policy = GSD_POWER_ACTION_SHUTDOWN;
         }
 
         return policy;
@@ -1765,7 +1791,7 @@ out:
 }
 
 static void
-engine_device_changed_cb (UpClient *client, UpDevice *device, GsdPowerManager *manager)
+device_properties_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager)
 {
         UpDeviceKind kind;
         UpDeviceState state;
@@ -2291,7 +2317,7 @@ do_lid_closed_action (GsdPowerManager *manager)
 }
 
 static void
-up_client_changed_cb (UpClient *client, GsdPowerManager *manager)
+lid_state_changed_cb (UpClient *client, GParamSpec *pspec, GsdPowerManager *manager)
 {
         gboolean tmp;
 
@@ -3479,10 +3505,8 @@ gsd_power_manager_start (GsdPowerManager *manager,
                           G_CALLBACK (engine_device_added_cb), manager);
         g_signal_connect (manager->priv->up_client, "device-removed",
                           G_CALLBACK (engine_device_removed_cb), manager);
-        g_signal_connect (manager->priv->up_client, "device-changed",
-                          G_CALLBACK (engine_device_changed_cb), manager);
-        g_signal_connect_after (manager->priv->up_client, "changed",
-                                G_CALLBACK (up_client_changed_cb), manager);
+        g_signal_connect_after (manager->priv->up_client, "notify::lid-is-closed",
+                          G_CALLBACK (lid_state_changed_cb), manager);
         g_signal_connect (manager->priv->up_client, "notify::on-battery",
                           G_CALLBACK (up_client_on_battery_cb), manager);
 
