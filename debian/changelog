@@ -1,6 +1,7 @@
 unity-settings-daemon (14.04.0+14.10.20140605-0ubuntu3) utopic; urgency=medium
 
   * Add patch to support upower 0.99. Thanks Tim Lunn. LP: #1330037
+  * Bump build-depend on upower to >= 0.99.1
 
  -- Jackson Doak <noskcaj@ubuntu.com>  Sat, 13 Sep 2014 06:55:32 +1000
 
