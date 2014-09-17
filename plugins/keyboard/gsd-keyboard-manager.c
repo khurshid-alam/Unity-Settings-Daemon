@@ -51,6 +51,7 @@
 #endif
 
 #ifdef HAVE_FCITX
+#include <fcitx-config/fcitx-config.h>
 #include <fcitx-gclient/fcitxinputmethod.h>
 #endif
 
@@ -1549,6 +1550,51 @@ enable_fcitx_engines (GsdKeyboardManager *manager,
         g_ptr_array_unref (engines);
 }
 
+struct _FcitxShareStateConfig
+{
+        FcitxGenericConfig config;
+        gint share_state;
+};
+
+typedef struct _FcitxShareStateConfig FcitxShareStateConfig;
+
+static CONFIG_BINDING_BEGIN (FcitxShareStateConfig)
+CONFIG_BINDING_REGISTER ("Program", "ShareStateAmongWindow", share_state)
+CONFIG_BINDING_END ()
+
+static CONFIG_DESC_DEFINE (get_fcitx_config_desc, "config.desc")
+
+static void
+update_share_state_from_per_window (GsdKeyboardManager *manager)
+{
+        /* Set Fcitx' share state setting based on the GSettings per-window option. */
+        GSettings *settings = g_settings_new ("org.gnome.libgnomekbd.desktop");
+        gboolean per_window = g_settings_get_boolean (settings, "group-per-window");
+
+        FcitxShareStateConfig config;
+
+        /* Load the user's Fcitx configuration. */
+        FILE *file = FcitxXDGGetFileUserWithPrefix (NULL, "config", "r", NULL);
+        FcitxConfigFile *config_file = FcitxConfigParseConfigFileFp (file, get_fcitx_config_desc ());
+        FcitxShareStateConfigConfigBind (&config, config_file, get_fcitx_config_desc ());
+
+        if (file)
+                fclose (file);
+
+        config.share_state = per_window ? 0 : 1;
+
+        /* Save the user's Fcitx configuration. */
+        file = FcitxXDGGetFileUserWithPrefix (NULL, "config", "w", NULL);
+        FcitxConfigSaveConfigFileFp (file, &config.config, get_fcitx_config_desc ());
+
+        if (file)
+                fclose (file);
+
+        fcitx_input_method_reload_config (manager->priv->fcitx);
+
+        g_object_unref (settings);
+}
+
 static void
 migrate_fcitx_engines (GsdKeyboardManager *manager)
 {
@@ -1577,10 +1623,14 @@ migrate_fcitx_engines (GsdKeyboardManager *manager)
                         }
                 }
 
-                if (migrate)
+                if (migrate) {
+                        /* Migrate Fcitx to GSettings. */
                         update_input_sources_from_fcitx_engines (manager, manager->priv->fcitx);
-                else
+                } else {
+                        /* Migrate GSettings to Fcitx. */
                         enable_fcitx_engines (manager, TRUE);
+                        update_share_state_from_per_window (manager);
+                }
 
                 g_ptr_array_unref (engines);
         }
