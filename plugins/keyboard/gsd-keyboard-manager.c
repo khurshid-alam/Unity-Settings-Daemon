@@ -1571,7 +1571,7 @@ update_share_state_from_per_window (GsdKeyboardManager *manager)
         GSettings *settings = g_settings_new ("org.gnome.libgnomekbd.desktop");
         gboolean per_window = g_settings_get_boolean (settings, "group-per-window");
 
-        FcitxShareStateConfig config;
+        FcitxShareStateConfig config = { { NULL } };
 
         /* Load the user's Fcitx configuration. */
         FILE *file = FcitxXDGGetFileUserWithPrefix (NULL, "config", "r", NULL);
