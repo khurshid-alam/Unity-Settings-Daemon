@@ -42,6 +42,8 @@ Build-Depends: cdbs,
                libsystemd-login-dev (>= 183),
                libibus-1.0-dev (>= 1.5.0),
                libgl1-mesa-dev,
+               libxkbfile-dev,
+               xkb-data,
 Standards-Version: 3.9.3
 
 Package: unity-settings-daemon
