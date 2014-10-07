@@ -154,6 +154,7 @@ add_device (GdkDeviceManager *device_manager,
             GError          **error)
 {
         GsdIdleMonitor *monitor;
+        int device_id;
 
         if (g_hash_table_lookup (manager->priv->monitors, device) != NULL)
                 return TRUE;
@@ -165,7 +166,8 @@ add_device (GdkDeviceManager *device_manager,
                 return TRUE;
 
         /* Create IdleMonitors for each pointer device */
-        monitor = gsd_idle_monitor_new_for_device (device);
+        device_id = gdk_x11_device_get_id (device);
+        monitor = gsd_idle_monitor_get_for_device (device_id);
         if (!monitor) {
                 g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                              "Per-device idletime monitor not available");
