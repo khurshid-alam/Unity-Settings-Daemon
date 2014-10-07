@@ -858,6 +858,7 @@ on_device_removed (GdkDeviceManager         *device_manager,
   int device_id;
   char *path;
 
+  g_warning ("removing device %i", device_d);
   device_id = gdk_x11_device_get_id (device);
   path = g_strdup_printf ("/org/gnome/Mutter/IdleMonitor/Device%d", device_id);
   g_dbus_object_manager_server_unexport (manager, path);
