@@ -466,12 +466,12 @@ init_xsync (void)
 {
     int major, minor;
     if (!xsync) {
-        g_warning("init failed");
+        g_warning ("init failed");
         xsync = g_slice_new0 (GsdXSync);
     }
-    g_warning("Display %d", GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
+    g_warning ("Display %d", GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
     xsync->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
-    g_warning("Display %d", xsync->display);
+    g_warning ("Display %d", xsync->display);
     xsync->have_xsync = FALSE;
 
     xsync->sync_error_base = 0;
@@ -540,7 +540,8 @@ main (int argc, char *argv[])
 
         g_debug ("Shutting down");
 
-        g_slice_free(GsdXSync, xsync);
+        if (xsync)
+                g_slice_free(GsdXSync, xsync);
 
         if (name_id > 0) {
                 g_bus_unown_name (name_id);
