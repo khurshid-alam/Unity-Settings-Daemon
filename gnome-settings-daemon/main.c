@@ -37,6 +37,7 @@
 #include "gnome-settings-plugin.h"
 #include "gnome-settings-profile.h"
 #include "gnome-settings-session.h"
+#include "gsd-idle-monitor-private.h"
 
 #define GNOME_SESSION_DBUS_NAME      "org.gnome.SessionManager"
 #define GNOME_SESSION_CLIENT_PRIVATE_DBUS_INTERFACE "org.gnome.SessionManager.ClientPrivate"
@@ -54,6 +55,18 @@ static GOptionEntry entries[] = {
         { "timed-exit", 0, 0, G_OPTION_ARG_NONE, &do_timed_exit, N_("Exit after a time (for debugging)"), NULL },
         {NULL}
 };
+
+typedef struct
+{
+        /* X11 implementation */
+        Display     *display;
+        int          sync_event_base;
+        int          sync_error_base;
+        unsigned int have_xsync : 1;
+
+}GsdXSync;
+
+static GsdXSync *xsync;
 
 static gboolean
 timed_exit_cb (void)
@@ -444,6 +457,48 @@ parse_args (int *argc, char ***argv)
                 g_setenv ("G_MESSAGES_DEBUG", "all", FALSE);
 }
 
+static void
+init_xsync (void)
+{
+#ifdef HAVE_XSYNC
+  {
+    int major, minor;
+
+    xsync->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
+    xsync->have_xsync = FALSE;
+
+    xsync->sync_error_base = 0;
+    xsync->sync_event_base = 0;
+
+    /* I don't think we really have to fill these in */
+    major = SYNC_MAJOR_VERSION;
+    minor = SYNC_MINOR_VERSION;
+
+    if (!XSyncQueryExtension (xsync->display,
+                              &xsync->sync_event_base,
+                              &xsync->sync_error_base) ||
+        !XSyncInitialize (xsync->display,
+                          &major, &minor))
+      {
+        xsync->sync_error_base = 0;
+        xsync->sync_event_base = 0;
+      }
+    else
+      {
+        xsync->have_xsync = TRUE;
+        XSyncSetPriority (xsync->display, None, 10);
+      }
+
+    g_warning ("Attempted to init Xsync, found version %d.%d error base %d event base %d\n",
+                  major, minor,
+                  xsync->sync_error_base,
+                  xsync->sync_event_base);
+  }
+#else  /* HAVE_XSYNC */
+  g_warning ("Not compiled with Xsync support\n");
+#endif /* !HAVE_XSYNC */
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -473,9 +528,15 @@ main (int argc, char *argv[])
                 g_timeout_add_seconds (30, (GSourceFunc) timed_exit_cb, NULL);
         }
 
+        xsync = g_slice_new0 (GsdXSync);
+        init_xsync();
+        gsd_idle_monitor_init_dbus (replace);
+
         gtk_main ();
 
         g_debug ("Shutting down");
+
+        g_slice_free(GsdXSync, xsync);
 
         if (name_id > 0) {
                 g_bus_unown_name (name_id);
