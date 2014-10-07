@@ -31,11 +31,7 @@
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
-#include <gdk/gdk.h>
-#include <gdk/gdkx.h>
 #include <libnotify/notify.h>
-#include <X11/Xlib.h>
-#include <X11/extensions/sync.h>
 
 #include "gnome-settings-manager.h"
 #include "gnome-settings-plugin.h"
@@ -60,17 +56,7 @@ static GOptionEntry entries[] = {
         {NULL}
 };
 
-typedef struct
-{
-        /* X11 implementation */
-        Display     *display;
-        int          sync_event_base;
-        int          sync_error_base;
-        unsigned int have_xsync : 1;
 
-}GsdXSync;
-
-static GsdXSync *xsync;
 
 static gboolean
 timed_exit_cb (void)
@@ -461,40 +447,6 @@ parse_args (int *argc, char ***argv)
                 g_setenv ("G_MESSAGES_DEBUG", "all", FALSE);
 }
 
-static void
-init_xsync (void)
-{
-    int major, minor;
-    xsync->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
-    xsync->have_xsync = FALSE;
-
-    xsync->sync_error_base = 0;
-    xsync->sync_event_base = 0;
-
-    /* I don't think we really have to fill these in */
-    major = SYNC_MAJOR_VERSION;
-    minor = SYNC_MINOR_VERSION;
-
-    if (!XSyncQueryExtension (xsync->display,
-                              &xsync->sync_event_base,
-                              &xsync->sync_error_base) ||
-        !XSyncInitialize (xsync->display,
-                          &major, &minor))
-      {
-        xsync->sync_error_base = 0;
-        xsync->sync_event_base = 0;
-      }
-    else
-      {
-        xsync->have_xsync = TRUE;
-        XSyncSetPriority (xsync->display, None, 10);
-      }
-
-    g_warning ("Attempted to init Xsync, found version %d.%d error base %d event base %d\n",
-                  major, minor,
-                  xsync->sync_error_base,
-                  xsync->sync_event_base);
-}
 
 int
 main (int argc, char *argv[])
@@ -505,7 +457,7 @@ main (int argc, char *argv[])
         bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
         textdomain (GETTEXT_PACKAGE);
         setlocale (LC_ALL, "");
-        xsync = g_slice_new0 (GsdXSync);
+
 
         parse_args (&argc, &argv);
 
@@ -525,9 +477,7 @@ main (int argc, char *argv[])
         if (do_timed_exit) {
                 g_timeout_add_seconds (30, (GSourceFunc) timed_exit_cb, NULL);
         }
-
-        
-        init_xsync();
+     
         gsd_idle_monitor_init_dbus (replace);
 
         gtk_main ();
