@@ -1,4 +1,4 @@
-unity-settings-daemon (14.04.0+14.10.20140922-0ubuntu4~u4) utopic; urgency=medium
+unity-settings-daemon (14.04.0+14.10.20140922-0ubuntu4) utopic; urgency=medium
 
   * Copy in Idle Monitor from 3.10 and hook up dbus interface
 
