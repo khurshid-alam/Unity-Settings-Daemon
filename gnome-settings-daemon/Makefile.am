@@ -34,7 +34,7 @@ libunity_settings_daemon_la_SOURCES =		\
 	gsd-idle-monitor.h
 
 nodist_libunity_settings_daemon_la_SOURCES =		\
-        $(dbus_idle_built_sources)
+	$(dbus_idle_built_sources)
 
 libunity_settings_daemon_include_HEADERS =		\
 	gsd-pnp-ids.h \
@@ -63,12 +63,12 @@ BUILT_SOURCES = $(dbus_idle_built_sources)
 dbus_idle_built_sources = meta-dbus-idle-monitor.c meta-dbus-idle-monitor.h
 
 $(dbus_idle_built_sources) : Makefile.am idle-monitor.xml
-        $(AM_V_GEN)gdbus-codegen                                                        \
-                --interface-prefix org.gnome.Mutter                                     \
-                --c-namespace MetaDBus                                                  \
-                --generate-c-code meta-dbus-idle-monitor                                \
-                --c-generate-object-manager                                             \
-                $(srcdir)/idle-monitor.xml
+	$(AM_V_GEN)gdbus-codegen                                                        \
+		--interface-prefix org.gnome.Mutter                                     \
+		--c-namespace MetaDBus                                                  \
+		--generate-c-code meta-dbus-idle-monitor                                \
+		--c-generate-object-manager                                             \
+		$(srcdir)/idle-monitor.xml
 
 check_gl_texture_size_CPPFLAGS = \
 	$(CHECK_GL_TEXTURE_SIZE_CFLAGS)
@@ -153,6 +153,6 @@ unity_settings_daemon_LDADD = 		\
 	$(NULL)
 
 CLEANFILES = $(gsd_SCRIPTS)             \
-             $(dbus_idle_built_sources)
+	$(dbus_idle_built_sources)
 
 # vim: ts=8
