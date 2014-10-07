@@ -26,4 +26,4 @@
 void gsd_idle_monitor_handle_xevent_all (XEvent *xevent);
 
 
-void gsd_idle_monitor_init_dbus (void);
+void gsd_idle_monitor_init_dbus (gboolean replace);

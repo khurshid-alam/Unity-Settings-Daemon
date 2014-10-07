@@ -315,7 +315,6 @@ xevent_filter (GdkXEvent *xevent,
                GsdIdleMonitor *monitor)
 {
   XEvent *ev;
-  GsdMonitorManager *monitor_manager;
 
   ev = xevent;
 
@@ -891,7 +890,7 @@ on_name_lost (GDBusConnection *connection,
 {
   g_warning ("Lost or failed to acquire name %s\n", name);
 
-  mainloop_quit();
+  //mainloop_quit();
 }
 
 void
