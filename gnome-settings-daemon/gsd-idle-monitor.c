@@ -328,11 +328,8 @@ xevent_filter (GdkXEvent *xevent,
   XEvent *ev;
 
   ev = xevent;
-  if (ev->xany.type != xsync->sync_event_base + XSyncAlarmNotify) {
-    return GDK_FILTER_CONTINUE;
-  }
-
-  gsd_idle_monitor_handle_xevent_all (ev);
+  if (ev->xany.type == xsync->sync_event_base + XSyncAlarmNotify) {
+      gsd_idle_monitor_handle_xevent_all (ev);
 
   return GDK_FILTER_CONTINUE;
 }
@@ -360,6 +357,8 @@ gsd_idle_monitor_dispose (GObject *object)
   GsdIdleMonitor *monitor;
 
   monitor = gsd_idle_monitor (object);
+
+  g_warning ("Disposing %p", monitor);
 
   g_clear_pointer (&monitor->watches, g_hash_table_destroy);
   g_clear_pointer (&monitor->alarms, g_hash_table_destroy);
@@ -454,6 +453,7 @@ gsd_idle_monitor_init (GsdIdleMonitor *monitor)
                                                   (GDestroyNotify)idle_monitor_watch_free);
 
   monitor->alarms = g_hash_table_new (NULL, NULL);
+  g_warning ("Created %p", monitor);
 }
 
 static void
@@ -813,6 +813,9 @@ create_monitor_skeleton (GDBusObjectManagerServer *manager,
   meta_dbus_object_skeleton_set_idle_monitor (object, skeleton);
 
   g_dbus_object_manager_server_export (manager, G_DBUS_OBJECT_SKELETON (object));
+
+  g_object_unref (skeleton);
+  g_object_unref (object);
 }
 
 static void
