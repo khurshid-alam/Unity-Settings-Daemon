@@ -465,13 +465,7 @@ static void
 init_xsync (void)
 {
     int major, minor;
-    if (!xsync) {
-        g_warning ("init failed");
-        xsync = g_slice_new0 (GsdXSync);
-    }
-    g_warning ("Display %d", GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
     xsync->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
-    g_warning ("Display %d", xsync->display);
     xsync->have_xsync = FALSE;
 
     xsync->sync_error_base = 0;

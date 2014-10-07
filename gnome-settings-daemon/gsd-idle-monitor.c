@@ -36,7 +36,6 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 
-//#include "main.h"
 #include "gsd-idle-monitor.h"
 #include "gsd-idle-monitor-private.h"
 #include "meta-dbus-idle-monitor.h"
@@ -317,6 +316,9 @@ xevent_filter (GdkXEvent *xevent,
   XEvent *ev;
 
   ev = xevent;
+  if (ev->xany.type != xsync->sync_event_base + XSyncAlarmNotify) {
+    return GDK_FILTER_CONTINUE;
+  }
 
   gsd_idle_monitor_handle_xevent_all (ev);
 
