@@ -207,7 +207,6 @@ gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
   GList *watches;
   gboolean has_alarm;
 
-  
 
   if (alarm_event->state != XSyncAlarmActive)
     return;
@@ -217,6 +216,9 @@ gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
   has_alarm = FALSE;
 
   g_warning ("Handle event %p", monitor->alarms);
+  //sometimes we get events for disposed objects, bail if thats the case
+  if (!monitor->alarms)
+    return;
 
   if (alarm == monitor->user_active_alarm)
     {
