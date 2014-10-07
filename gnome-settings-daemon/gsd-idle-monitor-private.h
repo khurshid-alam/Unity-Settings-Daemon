@@ -20,7 +20,8 @@
  *         from gnome-desktop/libgnome-desktop/gnome-idle-monitor.c
  */
 
-#include <meta/meta-idle-monitor.h>
+#include <X11/Xlib.h>
+#include <gsd-idle-monitor.h>
 
 void gsd_idle_monitor_handle_xevent_all (XEvent *xevent);
 

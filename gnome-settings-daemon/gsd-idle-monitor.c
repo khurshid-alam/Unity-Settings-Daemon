@@ -1,41 +1,45 @@
-/* -*- mode: C; c-file-style: "linux"; indent-tabs-mode: t -*-
+/* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
+
+/*
+ * Copyright 2013 Red Hat, Inc.
  *
- * Adapted from gnome-session/gnome-session/gs-idle-monitor.c
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of the
+ * License, or (at your option) any later version.
  *
- * Copyright (C) 2012 Red Hat, Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
- * GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * Adapted from gnome-session/gnome-session/gs-idle-monitor.c and
+ *         from gnome-desktop/libgnome-desktop/gnome-idle-monitor.c
+ */
+
+/**
+ * SECTION:idle-monitor
+ * @title: GsdIdleMonitor
+ * @short_description: Mutter idle counter (similar to X's IDLETIME)
  */
 
 #include "config.h"
 
-#include <time.h>
 #include <string.h>
-
 #include <X11/Xlib.h>
 #include <X11/extensions/sync.h>
-
-#include <glib.h>
-#include <gdk/gdkx.h>
 #include <gdk/gdk.h>
+#include <gdk/gdkx.h>
 
+//#include "main.h"
 #include "gsd-idle-monitor.h"
 #include "gsd-idle-monitor-private.h"
 #include "meta-dbus-idle-monitor.h"
-
-#define GSD_IDLE_MONITOR_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GSD_TYPE_IDLE_MONITOR, GsdIdleMonitorPrivate))
 
 G_STATIC_ASSERT(sizeof(unsigned long) == sizeof(gpointer));
 
@@ -60,63 +64,70 @@ struct _GsdIdleMonitorClass
   GObjectClass parent_class;
 };
 
-
-/*struct _GsdIdleMonitorPrivate
-{
-	Display	    *display;
-
-	GHashTable  *watches;
-	GHashTable  *alarms;
-	int	     sync_event_base;
-	XSyncCounter counter;
-
-	XSyncAlarm   user_active_alarm;
-
-	GdkDevice   *device;
-};*/
-
 typedef struct
 {
-	GsdIdleMonitor         *monitor;
-	guint			  id;
-	GsdIdleMonitorWatchFunc callback;
-	gpointer		  user_data;
-	GDestroyNotify		  notify;
-  	guint64                   timeout_msec;
+  GsdIdleMonitor          *monitor;
+  guint	                    id;
+  GsdIdleMonitorWatchFunc  callback;
+  gpointer		    user_data;
+  GDestroyNotify            notify;
+  guint64                   timeout_msec;
 
-    /* x11 */
-    XSyncAlarm                xalarm;
-    int                       idle_source_id;
+  /* x11 */
+  XSyncAlarm                xalarm;
+  int                       idle_source_id;
 } GsdIdleMonitorWatch;
 
 enum
 {
-	PROP_0,
-	PROP_DEVICE,
-	PROP_LAST,
+  PROP_0,
+  PROP_DEVICE_ID,
+  PROP_LAST,
 };
 
 static GParamSpec *obj_props[PROP_LAST];
 
-static GsdIdleMonitor *device_monitors[256];
+G_DEFINE_TYPE (GsdIdleMonitor, gsd_idle_monitor, G_TYPE_OBJECT)
+
+static GsdIdleMonitor  *device_monitors[256];
 static int              device_id_max;
-
-/*static void gsd_idle_monitor_initable_iface_init (GInitableIface *iface);
-
-G_DEFINE_TYPE_WITH_CODE (GsdIdleMonitor, gsd_idle_monitor, G_TYPE_OBJECT,
-			 G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
-						gsd_idle_monitor_initable_iface_init))*/
-
-G_DEFINE_TYPE (MetaIdleMonitor, meta_idle_monitor, G_TYPE_OBJECT)
 
 static gint64
 _xsyncvalue_to_int64 (XSyncValue value)
 {
-	return ((guint64) XSyncValueHigh32 (value)) << 32
-		| (guint64) XSyncValueLow32 (value);
+  return ((guint64) XSyncValueHigh32 (value)) << 32
+    | (guint64) XSyncValueLow32 (value);
 }
 
-#define GINT64_TO_XSYNCVALUE(value, ret) XSyncIntsToValue (ret, value, ((guint64)value) >> 32)
+#define GUINT64_TO_XSYNCVALUE(value, ret) XSyncIntsToValue (ret, (value) & 0xFFFFFFFF, ((guint64)(value)) >> 32)
+
+static void
+fire_watch (GsdIdleMonitorWatch *watch)
+{
+  GsdIdleMonitor *monitor;
+  guint id;
+  gboolean is_user_active_watch;
+
+  monitor = watch->monitor;
+  g_object_ref (monitor);
+
+  if (watch->idle_source_id)
+    {
+      g_source_remove (watch->idle_source_id);
+      watch->idle_source_id = 0;
+    }
+
+  id = watch->id;
+  is_user_active_watch = (watch->timeout_msec == 0);
+
+  if (watch->callback)
+    watch->callback (monitor, id, watch->user_data);
+
+  if (is_user_active_watch)
+    gsd_idle_monitor_remove_watch (monitor, id);
+
+  g_object_unref (monitor);
+}
 
 static XSyncAlarm
 _xsync_alarm_set (GsdIdleMonitor	*monitor,
@@ -124,34 +135,34 @@ _xsync_alarm_set (GsdIdleMonitor	*monitor,
 		  guint64                interval,
 		  gboolean               want_events)
 {
-	XSyncAlarmAttributes attr;
-	XSyncValue	     delta;
-	guint		     flags;
+  XSyncAlarmAttributes attr;
+  XSyncValue	     delta;
+  guint		     flags;
 
-	flags = XSyncCACounter | XSyncCAValueType | XSyncCATestType |
-		XSyncCAValue | XSyncCADelta | XSyncCAEvents;
+  flags = XSyncCACounter | XSyncCAValueType | XSyncCATestType |
+    XSyncCAValue | XSyncCADelta | XSyncCAEvents;
 
-	XSyncIntToValue (&delta, 0);
-	attr.trigger.counter = monitor->priv->counter;
-	attr.trigger.value_type = XSyncAbsolute;
-	attr.delta = delta;
-	attr.events = want_events;
+  XSyncIntToValue (&delta, 0);
+  attr.trigger.counter = monitor->counter;
+  attr.trigger.value_type = XSyncAbsolute;
+  attr.delta = delta;
+  attr.events = want_events;
 
-	GINT64_TO_XSYNCVALUE (interval, &attr.trigger.wait_value);
-	attr.trigger.test_type = test_type;
-	return XSyncCreateAlarm (monitor->priv->display, flags, &attr);
+  GUINT64_TO_XSYNCVALUE (interval, &attr.trigger.wait_value);
+  attr.trigger.test_type = test_type;
+  return XSyncCreateAlarm (monitor->display, flags, &attr);
 }
 
 static void
 ensure_alarm_rescheduled (Display    *dpy,
 			  XSyncAlarm  alarm)
 {
-	XSyncAlarmAttributes attr;
+  XSyncAlarmAttributes attr;
 
-	/* Some versions of Xorg have an issue where alarms aren't
-	 * always rescheduled. Calling XSyncChangeAlarm, even
-	 * without any attributes, will reschedule the alarm. */
-	XSyncChangeAlarm (dpy, alarm, 0, &attr);
+  /* Some versions of Xorg have an issue where alarms aren't
+   * always rescheduled. Calling XSyncChangeAlarm, even
+   * without any attributes, will reschedule the alarm. */
+  XSyncChangeAlarm (dpy, alarm, 0, &attr);
 }
 
 static void
@@ -159,9 +170,9 @@ set_alarm_enabled (Display    *dpy,
 		   XSyncAlarm  alarm,
 		   gboolean    enabled)
 {
-	XSyncAlarmAttributes attr;
-	attr.events = enabled;
-	XSyncChangeAlarm (dpy, alarm, XSyncCAEvents, &attr);
+  XSyncAlarmAttributes attr;
+  attr.events = enabled;
+  XSyncChangeAlarm (dpy, alarm, XSyncCAEvents, &attr);
 }
 
 static void
@@ -177,9 +188,8 @@ check_x11_watch (gpointer data,
   fire_watch (watch);
 }
 
-
 static void
-gsd_idle_monitor_handle_xevent (MetaIdleMonitor       *monitor,
+gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
                                  XSyncAlarmNotifyEvent *alarm_event)
 {
   XSyncAlarm alarm;
@@ -226,317 +236,211 @@ gsd_idle_monitor_handle_xevent_all (XEvent *xevent)
       gsd_idle_monitor_handle_xevent (device_monitors[i], (XSyncAlarmNotifyEvent*)xevent);
 }
 
-
-static void
-fire_watch (gpointer data,
-	    gpointer user_data)
-{
-	GsdIdleMonitorWatch *watch = data;
-	XSyncAlarm alarm = (XSyncAlarm) user_data;
-	GsdIdleMonitor *monitor;
-
-	if (watch->xalarm != alarm) {
-		return;
-	}
-
-	monitor = watch->monitor;
-	g_object_ref (monitor);
-
-	if (watch->callback) {
-		watch->callback (watch->monitor,
-				 watch->id,
-				 watch->user_data);
-	}
-
-	if (watch->xalarm == monitor->priv->user_active_alarm) {
-		gsd_idle_monitor_remove_watch (monitor, watch->id);
-	}
-
-	g_object_unref (monitor);
-}
-
-static void
-handle_alarm_notify_event (GsdIdleMonitor	    *monitor,
-			   XSyncAlarmNotifyEvent    *alarm_event)
-{
-	XSyncAlarm alarm;
-	GList *watches;
-	gboolean has_alarm;
-
-	if (alarm_event->state != XSyncAlarmActive) {
-		return;
-	}
-
-	alarm = alarm_event->alarm;
-
-	has_alarm = FALSE;
-
-	if (alarm == monitor->priv->user_active_alarm) {
-		set_alarm_enabled (monitor->priv->display,
-				   alarm,
-				   FALSE);
-		has_alarm = TRUE;
-	} else if (g_hash_table_contains (monitor->priv->alarms, (gpointer) alarm)) {
-		ensure_alarm_rescheduled (monitor->priv->display,
-					  alarm);
-		has_alarm = TRUE;
-	}
-
-	if (has_alarm) {
-		watches = g_hash_table_get_values (monitor->priv->watches);
-
-		g_list_foreach (watches,
-				fire_watch,
-				(gpointer) alarm);
-
-		g_list_free (watches);
-	}
-}
-
-static GdkFilterReturn
-xevent_filter (GdkXEvent	*xevent,
-	       GdkEvent		*event,
-	       GsdIdleMonitor *monitor)
-{
-	XEvent		      *ev;
-	XSyncAlarmNotifyEvent *alarm_event;
-
-	ev = xevent;
-	if (ev->xany.type != monitor->priv->sync_event_base + XSyncAlarmNotify) {
-		return GDK_FILTER_CONTINUE;
-	}
-
-	alarm_event = xevent;
-	handle_alarm_notify_event (monitor, alarm_event);
-
-	return GDK_FILTER_CONTINUE;
-}
-
 static char *
-counter_name_for_device (GdkDevice *device)
+counter_name_for_device (int device_id)
 {
-	if (device) {
-		gint device_id = gdk_x11_device_get_id (device);
-		if (device_id > 0)
-			return g_strdup_printf ("DEVICEIDLETIME %d", device_id);
-	}
+  if (device_id > 0)
+    return g_strdup_printf ("DEVICEIDLETIME %d", device_id);
 
-	return g_strdup ("IDLETIME");
+  return g_strdup ("IDLETIME");
 }
 
 static XSyncCounter
 find_idletime_counter (GsdIdleMonitor *monitor)
 {
-	int		    i;
-	int		    ncounters;
-	XSyncSystemCounter *counters;
-	XSyncCounter        counter = None;
-	char               *counter_name;
+  int		      i;
+  int		      ncounters;
+  XSyncSystemCounter *counters;
+  XSyncCounter        counter = None;
+  char               *counter_name;
 
-	counter_name = counter_name_for_device (monitor->priv->device);
-	counters = XSyncListSystemCounters (monitor->priv->display, &ncounters);
-	for (i = 0; i < ncounters; i++) {
-		if (counters[i].name != NULL && strcmp (counters[i].name, counter_name) == 0) {
-			counter = counters[i].counter;
-			break;
-		}
-	}
-	XSyncFreeSystemCounterList (counters);
-	g_free (counter_name);
+  counter_name = counter_name_for_device (monitor->device_id);
+  counters = XSyncListSystemCounters (monitor->display, &ncounters);
+  for (i = 0; i < ncounters; i++)
+    {
+      if (counters[i].name != NULL && strcmp (counters[i].name, counter_name) == 0)
+        {
+          counter = counters[i].counter;
+          break;
+        }
+    }
+  XSyncFreeSystemCounterList (counters);
+  g_free (counter_name);
 
-	return counter;
+  return counter;
 }
 
 static guint32
 get_next_watch_serial (void)
 {
-	static guint32 serial = 0;
-	g_atomic_int_inc (&serial);
-	return serial;
+  static guint32 serial = 0;
+  g_atomic_int_inc (&serial);
+  return serial;
 }
 
 static void
 idle_monitor_watch_free (GsdIdleMonitorWatch *watch)
 {
-	GsdIdleMonitor *monitor;
+  GsdIdleMonitor *monitor;
 
-	if (watch == NULL) {
-		return;
-	}
+  if (watch == NULL)
+    return;
 
-	monitor = watch->monitor;
+  monitor = watch->monitor;
+  g_object_ref (monitor);
 
-	if (watch->notify != NULL) {
-		watch->notify (watch->user_data);
-	}
+  if (watch->idle_source_id)
+    {
+      g_source_remove (watch->idle_source_id);
+      watch->idle_source_id = 0;
+    }
 
-	if (watch->xalarm != monitor->priv->user_active_alarm) {
-		XSyncDestroyAlarm (monitor->priv->display, watch->xalarm);
-		g_hash_table_remove (monitor->priv->alarms, (gpointer) watch->xalarm);
-	}
+  if (watch->notify != NULL)
+    watch->notify (watch->user_data);
 
-	g_slice_free (GsdIdleMonitorWatch, watch);
+  if (watch->xalarm != monitor->user_active_alarm &&
+      watch->xalarm != None)
+    {
+      XSyncDestroyAlarm (monitor->display, watch->xalarm);
+      g_hash_table_remove (monitor->alarms, (gpointer) watch->xalarm);
+    }
+
+  g_object_unref (monitor);
+  g_slice_free (GsdIdleMonitorWatch, watch);
+}
+
+GdkFilterReturn
+xevent_filter (GdkXEvent *xevent,
+               GdkEvent *event,
+               GsdIdleMonitor *monitor)
+{
+  XEvent *ev;
+  GsdMonitorManager *monitor_manager;
+
+  ev = xevent;
+
+  gsd_idle_monitor_handle_xevent_all (ev);
+
+  return GDK_FILTER_CONTINUE;
 }
 
 static void
 init_xsync (GsdIdleMonitor *monitor)
 {
-	int		    sync_error_base;
-	int		    res;
-	int		    major;
-	int		    minor;
 
-	res = XSyncQueryExtension (monitor->priv->display,
-				   &monitor->priv->sync_event_base,
-				   &sync_error_base);
-	if (! res) {
-		g_warning ("GsdIdleMonitor: Sync extension not present");
-		return;
-	}
+  monitor->counter = find_idletime_counter (monitor);
+  /* IDLETIME counter not found? */
+  if (monitor->counter == None)
+    {
+      g_warning ("IDLETIME counter not found\n");
+      return;
+    }
 
-	res = XSyncInitialize (monitor->priv->display, &major, &minor);
-	if (! res) {
-		g_warning ("GsdIdleMonitor: Unable to initialize Sync extension");
-		return;
-	}
+  monitor->user_active_alarm = _xsync_alarm_set (monitor, XSyncNegativeTransition, 1, FALSE);
 
-	monitor->priv->counter = find_idletime_counter (monitor);
-	/* IDLETIME counter not found? */
-	if (monitor->priv->counter == None)
-		return;
-
-	monitor->priv->user_active_alarm = _xsync_alarm_set (monitor, XSyncNegativeTransition, 1, FALSE);
-
-	gdk_window_add_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+  gdk_window_add_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
 }
 
 static void
 gsd_idle_monitor_dispose (GObject *object)
 {
-	GsdIdleMonitor *monitor;
+  GsdIdleMonitor *monitor;
 
-	monitor = GSD_IDLE_MONITOR (object);
+  monitor = gsd_idle_monitor (object);
 
-	g_clear_pointer (&monitor->priv->watches, g_hash_table_destroy);
-	g_clear_pointer (&monitor->priv->alarms, g_hash_table_destroy);
-	g_clear_object (&monitor->priv->device);
+  g_clear_pointer (&monitor->watches, g_hash_table_destroy);
+  g_clear_pointer (&monitor->alarms, g_hash_table_destroy);
 
-	if (monitor->priv->user_active_alarm != None) {
-		XSyncDestroyAlarm (monitor->priv->display, monitor->priv->user_active_alarm);
-		monitor->priv->user_active_alarm = None;
-	}
+  if (monitor->user_active_alarm != None)
+    {
+      XSyncDestroyAlarm (monitor->display, monitor->user_active_alarm);
+      monitor->user_active_alarm = None;
+    }
 
-	gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
 
-	G_OBJECT_CLASS (gsd_idle_monitor_parent_class)->dispose (object);
+  G_OBJECT_CLASS (gsd_idle_monitor_parent_class)->dispose (object);
 }
 
 static void
 gsd_idle_monitor_get_property (GObject    *object,
-				 guint       prop_id,
-				 GValue     *value,
-				 GParamSpec *pspec)
+                                guint       prop_id,
+                                GValue     *value,
+                                GParamSpec *pspec)
 {
-	GsdIdleMonitor *monitor = GSD_IDLE_MONITOR (object);
-	switch (prop_id)
-	{
-	case PROP_DEVICE:
-		g_value_set_object (value, monitor->priv->device);
-		break;
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
+  GsdIdleMonitor *monitor = gsd_idle_monitor (object);
+
+  switch (prop_id)
+    {
+    case PROP_DEVICE_ID:
+      g_value_set_int (value, monitor->device_id);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
 }
 
 static void
 gsd_idle_monitor_set_property (GObject      *object,
-				 guint         prop_id,
-				 const GValue *value,
-				 GParamSpec   *pspec)
+                                guint         prop_id,
+                                const GValue *value,
+                                GParamSpec   *pspec)
 {
-	GsdIdleMonitor *monitor = GSD_IDLE_MONITOR (object);
-	switch (prop_id)
-	{
-	case PROP_DEVICE:
-		monitor->priv->device = g_value_dup_object (value);
-		break;
-	default:
-		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-		break;
-	}
+  GsdIdleMonitor *monitor = gsd_idle_monitor (object);
+  switch (prop_id)
+    {
+    case PROP_DEVICE_ID:
+      monitor->device_id = g_value_get_int (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
 }
 
 static void
 gsd_idle_monitor_constructed (GObject *object)
 {
-	GsdIdleMonitor *monitor = GSD_IDLE_MONITOR (object);
+  GsdIdleMonitor *monitor = gsd_idle_monitor (object);
 
-	monitor->priv->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
-	init_xsync (monitor);
-}
-
-static gboolean
-gsd_idle_monitor_initable_init (GInitable     *initable,
-				  GCancellable  *cancellable,
-				  GError       **error)
-{
-	GsdIdleMonitor *monitor;
-
-	monitor = GSD_IDLE_MONITOR (initable);
-
-	if (monitor->priv->counter == None) {
-		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-				     "Per-device idletime is not supported");
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-static void
-gsd_idle_monitor_initable_iface_init (GInitableIface *iface)
-{
-	iface->init = gsd_idle_monitor_initable_init;
+  monitor->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
+  init_xsync (monitor);
 }
 
 static void
 gsd_idle_monitor_class_init (GsdIdleMonitorClass *klass)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-	object_class->dispose = gsd_idle_monitor_dispose;
-	object_class->constructed = gsd_idle_monitor_constructed;
-	object_class->get_property = gsd_idle_monitor_get_property;
-	object_class->set_property = gsd_idle_monitor_set_property;
+  object_class->dispose = gsd_idle_monitor_dispose;
+  object_class->constructed = gsd_idle_monitor_constructed;
+  object_class->get_property = gsd_idle_monitor_get_property;
+  object_class->set_property = gsd_idle_monitor_set_property;
 
-	/**
-	 * GsdIdleMonitor:device:
-	 *
-	 * The device to listen to idletime on.
-	 */
-	obj_props[PROP_DEVICE] =
-		g_param_spec_object ("device",
-				     "Device",
-				     "The device to listen to idletime on",
-				     GDK_TYPE_DEVICE,
-				     G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
-	g_object_class_install_property (object_class, PROP_DEVICE, obj_props[PROP_DEVICE]);
-
-	g_type_class_add_private (klass, sizeof (GsdIdleMonitorPrivate));
+  /**
+   * GsdIdleMonitor:device_id:
+   *
+   * The device to listen to idletime on.
+   */
+  obj_props[PROP_DEVICE_ID] =
+    g_param_spec_int ("device-id",
+                      "Device ID",
+                      "The device to listen to idletime on",
+                      0, 255, 0,
+                      G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (object_class, PROP_DEVICE_ID, obj_props[PROP_DEVICE_ID]);
 }
 
 static void
 gsd_idle_monitor_init (GsdIdleMonitor *monitor)
 {
-	monitor->priv = GSD_IDLE_MONITOR_GET_PRIVATE (monitor);
+  monitor->watches = g_hash_table_new_full (NULL,
+                                                  NULL,
+                                                  NULL,
+                                                  (GDestroyNotify)idle_monitor_watch_free);
 
-	monitor->priv->watches = g_hash_table_new_full (NULL,
-							NULL,
-							NULL,
-							(GDestroyNotify)idle_monitor_watch_free);
-
-	monitor->priv->alarms = g_hash_table_new (NULL, NULL);
+  monitor->alarms = g_hash_table_new (NULL, NULL);
 }
 
 static void
@@ -545,34 +449,34 @@ ensure_device_monitor (int device_id)
   if (device_monitors[device_id])
     return;
 
-  device_monitors[device_id] = g_object_new (META_TYPE_IDLE_MONITOR, "device-id", device_id, NULL);
+  device_monitors[device_id] = g_object_new (GSD_TYPE_IDLE_MONITOR, "device-id", device_id, NULL);
   device_id_max = MAX (device_id_max, device_id);
 }
 
 /**
- * meta_idle_monitor_get_core:
+ * gsd_idle_monitor_get_core:
  *
- * Returns: (transfer none): the #MetaIdleMonitor that tracks the server-global
+ * Returns: (transfer none): the #GsdIdleMonitor that tracks the server-global
  * idletime for all devices. To track device-specific idletime,
- * use meta_idle_monitor_get_for_device().
+ * use gsd_idle_monitor_get_for_device().
  */
-MetaIdleMonitor *
-meta_idle_monitor_get_core (void)
+GsdIdleMonitor *
+gsd_idle_monitor_get_core (void)
 {
   ensure_device_monitor (0);
   return device_monitors[0];
 }
 
 /**
- * meta_idle_monitor_get_for_device:
+ * gsd_idle_monitor_get_for_device:
  * @device_id: the device to get the idle time for.
  *
- * Returns: (transfer none): a new #MetaIdleMonitor that tracks the
+ * Returns: (transfer none): a new #GsdIdleMonitor that tracks the
  * device-specific idletime for @device. To track server-global idletime
- * for all devices, use meta_idle_monitor_get_core().
+ * for all devices, use gsd_idle_monitor_get_core().
  */
-MetaIdleMonitor *
-meta_idle_monitor_get_for_device (int device_id)
+GsdIdleMonitor *
+gsd_idle_monitor_get_for_device (int device_id)
 {
   g_return_val_if_fail (device_id > 0 && device_id < 256, NULL);
 
@@ -580,56 +484,54 @@ meta_idle_monitor_get_for_device (int device_id)
   return device_monitors[device_id];
 }
 
-/**
- * gsd_idle_monitor_new:
- *
- * Returns: a new #GsdIdleMonitor that tracks the server-global
- * idletime for all devices. To track device-specific idletime,
- * use gsd_idle_monitor_new_for_device().
- */
-GsdIdleMonitor *
-gsd_idle_monitor_new (void)
+static gboolean
+fire_watch_idle (gpointer data)
 {
-	return GSD_IDLE_MONITOR (g_initable_new (GSD_TYPE_IDLE_MONITOR, NULL, NULL, NULL));
-}
+  GsdIdleMonitorWatch *watch = data;
 
-/**
- * gsd_idle_monitor_new_for_device:
- * @device: A #GdkDevice to get the idle time for.
- *
- * Returns: a new #GsdIdleMonitor that tracks the device-specific
- * idletime for @device. If device-specific idletime is not available,
- * %NULL is returned, and @error is set. To track server-global
- * idletime for all devices, use gsd_idle_monitor_new().
- */
-GsdIdleMonitor *
-gsd_idle_monitor_new_for_device (GdkDevice  *device)
-{
-	return GSD_IDLE_MONITOR (g_initable_new (GSD_TYPE_IDLE_MONITOR, NULL, NULL,
-						   "device", device, NULL));
+  watch->idle_source_id = 0;
+  fire_watch (watch);
+
+  return FALSE;
 }
 
 static GsdIdleMonitorWatch *
-make_watch (GsdIdleMonitor          *monitor,
-	    XSyncAlarm                 xalarm,
-	    GsdIdleMonitorWatchFunc  callback,
+make_watch (GsdIdleMonitor           *monitor,
+            guint64                    timeout_msec,
+	    GsdIdleMonitorWatchFunc   callback,
 	    gpointer                   user_data,
 	    GDestroyNotify             notify)
 {
-	GsdIdleMonitorWatch *watch;
+  GsdIdleMonitorWatch *watch;
 
-	watch = g_slice_new0 (GsdIdleMonitorWatch);
-	watch->monitor = monitor;
-	watch->id = get_next_watch_serial ();
-	watch->callback = callback;
-	watch->user_data = user_data;
-	watch->notify = notify;
-	watch->xalarm = xalarm;
+  watch = g_slice_new0 (GsdIdleMonitorWatch);
+  watch->monitor = monitor;
+  watch->id = get_next_watch_serial ();
+  watch->callback = callback;
+  watch->user_data = user_data;
+  watch->notify = notify;
+  watch->timeout_msec = timeout_msec;
 
-	g_hash_table_insert (monitor->priv->watches,
-			     GUINT_TO_POINTER (watch->id),
-			     watch);
-	return watch;
+  if (timeout_msec != 0)
+    {
+      watch->xalarm = _xsync_alarm_set (monitor, XSyncPositiveTransition, timeout_msec, TRUE);
+
+      g_hash_table_add (monitor->alarms, (gpointer) watch->xalarm);
+
+      if (gsd_idle_monitor_get_idletime (monitor) > (gint64)timeout_msec)
+        watch->idle_source_id = g_idle_add (fire_watch_idle, watch);
+    }
+  else if (monitor->user_active_alarm != None)
+    {
+      watch->xalarm = monitor->user_active_alarm;
+
+      set_alarm_enabled (monitor->display, monitor->user_active_alarm, TRUE);
+    }
+
+  g_hash_table_insert (monitor->watches,
+                       GUINT_TO_POINTER (watch->id),
+                       watch);
+  return watch;
 }
 
 /**
@@ -656,25 +558,23 @@ make_watch (GsdIdleMonitor          *monitor,
  */
 guint
 gsd_idle_monitor_add_idle_watch (GsdIdleMonitor	       *monitor,
-				   guint64	                interval_msec,
-				   GsdIdleMonitorWatchFunc    callback,
-				   gpointer			user_data,
-				   GDestroyNotify		notify)
+                                  guint64	                interval_msec,
+                                  GsdIdleMonitorWatchFunc      callback,
+                                  gpointer			user_data,
+                                  GDestroyNotify		notify)
 {
-	GsdIdleMonitorWatch *watch;
+  GsdIdleMonitorWatch *watch;
 
-	g_return_val_if_fail (GSD_IS_IDLE_MONITOR (monitor), 0);
+  g_return_val_if_fail (GSD_IS_IDLE_MONITOR (monitor), 0);
+  g_return_val_if_fail (interval_msec > 0, 0);
 
-	watch = make_watch (monitor,
-			    _xsync_alarm_set (monitor, XSyncPositiveTransition, interval_msec, TRUE),
-			    callback,
-			    user_data,
-			    notify);
+  watch = make_watch (monitor,
+                      interval_msec,
+                      callback,
+                      user_data,
+                      notify);
 
-	g_hash_table_add (monitor->priv->alarms,
-			  (gpointer) watch->xalarm);
-
-	return watch->id;
+  return watch->id;
 }
 
 /**
@@ -695,25 +595,21 @@ gsd_idle_monitor_add_idle_watch (GsdIdleMonitor	       *monitor,
  */
 guint
 gsd_idle_monitor_add_user_active_watch (GsdIdleMonitor          *monitor,
-					  GsdIdleMonitorWatchFunc  callback,
-					  gpointer		     user_data,
-					  GDestroyNotify	     notify)
+                                         GsdIdleMonitorWatchFunc  callback,
+                                         gpointer		   user_data,
+                                         GDestroyNotify	           notify)
 {
-	GsdIdleMonitorWatch *watch;
+  GsdIdleMonitorWatch *watch;
 
-	g_return_val_if_fail (GSD_IS_IDLE_MONITOR (monitor), 0);
+  g_return_val_if_fail (GSD_IS_IDLE_MONITOR (monitor), 0);
 
-	set_alarm_enabled (monitor->priv->display,
-			   monitor->priv->user_active_alarm,
-			   TRUE);
+  watch = make_watch (monitor,
+                      0,
+                      callback,
+                      user_data,
+                      notify);
 
-	watch = make_watch (monitor,
-			    monitor->priv->user_active_alarm,
-			    callback,
-			    user_data,
-			    notify);
-
-	return watch->id;
+  return watch->id;
 }
 
 /**
@@ -727,12 +623,14 @@ gsd_idle_monitor_add_user_active_watch (GsdIdleMonitor          *monitor,
  */
 void
 gsd_idle_monitor_remove_watch (GsdIdleMonitor *monitor,
-				 guint		   id)
+                                guint	         id)
 {
-	g_return_if_fail (GSD_IS_IDLE_MONITOR (monitor));
+  g_return_if_fail (GSD_IS_IDLE_MONITOR (monitor));
 
-	g_hash_table_remove (monitor->priv->watches,
-			     GUINT_TO_POINTER (id));
+  g_object_ref (monitor);
+  g_hash_table_remove (monitor->watches,
+                       GUINT_TO_POINTER (id));
+  g_object_unref (monitor);
 }
 
 /**
@@ -744,12 +642,12 @@ gsd_idle_monitor_remove_watch (GsdIdleMonitor *monitor,
 gint64
 gsd_idle_monitor_get_idletime (GsdIdleMonitor *monitor)
 {
-	XSyncValue value;
+  XSyncValue value;
 
-	if (!XSyncQueryCounter (monitor->priv->display, monitor->priv->counter, &value))
-		return -1;
+  if (!XSyncQueryCounter (monitor->display, monitor->counter, &value))
+    return -1;
 
-	return _xsyncvalue_to_int64 (value);
+  return _xsyncvalue_to_int64 (value);
 }
 
 static gboolean
@@ -843,7 +741,7 @@ handle_add_idle_watch (MetaDBusIdleMonitor   *skeleton,
   DBusWatch *watch;
 
   watch = make_dbus_watch (skeleton, invocation, monitor);
-  watch->watch_id = meta_idle_monitor_add_idle_watch (monitor, interval,
+  watch->watch_id = gsd_idle_monitor_add_idle_watch (monitor, interval,
                                                       dbus_idle_callback, watch, destroy_dbus_watch);
 
   meta_dbus_idle_monitor_complete_add_idle_watch (skeleton, invocation, watch->watch_id);
@@ -904,17 +802,18 @@ create_monitor_skeleton (GDBusObjectManagerServer *manager,
   g_dbus_object_manager_server_export (manager, G_DBUS_OBJECT_SKELETON (object));
 }
 
+static void
 on_device_added (GdkDeviceManager         *device_manager,
                  GdkDevice                *device,
                  GDBusObjectManagerServer *manager)
 {
 
-  MetaIdleMonitor *monitor;
+  GsdIdleMonitor *monitor;
   int device_id;
   char *path;
 
   device_id = gdk_x11_device_get_id (device);
-  monitor = meta_idle_monitor_get_for_device (device_id);
+  monitor = gsd_idle_monitor_get_for_device (device_id);
   path = g_strdup_printf ("/org/gnome/Mutter/IdleMonitor/Device%d", device_id);
 
   create_monitor_skeleton (manager, monitor, path);
@@ -939,7 +838,6 @@ on_device_removed (GdkDeviceManager         *device_manager,
     device_id_max--;
 }
 
-
 static void
 on_bus_acquired (GDBusConnection *connection,
                  const char      *name,
@@ -948,7 +846,7 @@ on_bus_acquired (GDBusConnection *connection,
   GDBusObjectManagerServer *manager;
   GdkDeviceManager *device_manager;
   GsdIdleMonitor *monitor;
-  GSList *devices, *iter;
+  GList *devices, *iter;
   char *path;
 
   manager = g_dbus_object_manager_server_new ("/org/gnome/Mutter/IdleMonitor");
@@ -968,7 +866,7 @@ on_bus_acquired (GDBusConnection *connection,
   for (iter = devices; iter; iter = iter->next)
     on_device_added (device_manager, iter->data, manager);
 
-  g_slist_free (devices);
+  g_list_free (devices);
 
   g_signal_connect_object (device_manager, "device-added",
                            G_CALLBACK (on_device_added), manager, 0);
@@ -992,10 +890,12 @@ on_name_lost (GDBusConnection *connection,
               gpointer         user_data)
 {
   g_warning ("Lost or failed to acquire name %s\n", name);
+
+  mainloop_quit();
 }
 
 void
-gsd_idle_monitor_init_dbus (void)
+gsd_idle_monitor_init_dbus (gboolean replace)
 {
   static int dbus_name_id;
 
@@ -1005,7 +905,7 @@ gsd_idle_monitor_init_dbus (void)
   dbus_name_id = g_bus_own_name (G_BUS_TYPE_SESSION,
                                  "org.gnome.Mutter.IdleMonitor",
                                  G_BUS_NAME_OWNER_FLAGS_ALLOW_REPLACEMENT |
-                                 (meta_get_replace_current_wm () ?
+                                 (replace ?
                                   G_BUS_NAME_OWNER_FLAGS_REPLACE : 0),
                                  on_bus_acquired,
                                  on_name_acquired,
