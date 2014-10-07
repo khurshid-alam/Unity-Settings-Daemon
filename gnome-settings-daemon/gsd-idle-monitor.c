@@ -215,10 +215,9 @@ gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
 
   has_alarm = FALSE;
 
-  //g_warning ("Handle event %p", monitor->alarms);
   //sometimes we get events for disposed objects, bail if thats the case
-  if (!monitor->alarms)
-    return;
+  //if (!monitor->alarms)
+  //  return;
 
   if (alarm == monitor->user_active_alarm)
     {
@@ -319,7 +318,6 @@ idle_monitor_watch_free (GsdIdleMonitorWatch *watch)
       watch->xalarm != None)
     {
       XSyncDestroyAlarm (monitor->display, watch->xalarm);
-      //g_warning("alarms size %i",g_hash_table_size(monitor->alarms));
       g_hash_table_remove (monitor->alarms, (gpointer) watch->xalarm);
     }
 
@@ -462,7 +460,6 @@ gsd_idle_monitor_init (GsdIdleMonitor *monitor)
                                                   (GDestroyNotify)idle_monitor_watch_free);
 
   monitor->alarms = g_hash_table_new (NULL, NULL);
-  g_warning ("Created %p", monitor);
 }
 
 static void
@@ -650,7 +647,6 @@ gsd_idle_monitor_remove_watch (GsdIdleMonitor *monitor,
   g_return_if_fail (GSD_IS_IDLE_MONITOR (monitor));
 
   g_object_ref (monitor);
-  //g_warning("device %i, size: %i", monitor->device_id,g_hash_table_size(monitor->watches));
   g_hash_table_remove (monitor->watches,
                        GUINT_TO_POINTER (id));
   
