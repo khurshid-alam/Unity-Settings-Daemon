@@ -207,12 +207,16 @@ gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
   GList *watches;
   gboolean has_alarm;
 
+  
+
   if (alarm_event->state != XSyncAlarmActive)
     return;
 
   alarm = alarm_event->alarm;
 
   has_alarm = FALSE;
+
+  g_warning ("Handle event %p", monitor->alarms);
 
   if (alarm == monitor->user_active_alarm)
     {
@@ -330,7 +334,7 @@ xevent_filter (GdkXEvent *xevent,
   ev = xevent;
   if (ev->xany.type == xsync->sync_event_base + XSyncAlarmNotify) {
       gsd_idle_monitor_handle_xevent_all (ev);
-
+  }
   return GDK_FILTER_CONTINUE;
 }
 
