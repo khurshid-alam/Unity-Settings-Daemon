@@ -129,10 +129,14 @@ monitor_became_active (GsdIdleMonitor *monitor,
                        gpointer        user_data)
 {
         GdkDevice *device;
+        int device_id;
         GsdCursorManager *manager = GSD_CURSOR_MANAGER (user_data);
+        GdkDeviceManager *device_manager;
 
         /* Oh, so you're active? */
-        g_object_get (G_OBJECT (monitor), "device", &device, NULL);
+        g_object_get (G_OBJECT (monitor), "device_id", &device_id, NULL);
+        device_manager =  gdk_display_get_device_manager (gdk_display_get_default ());
+        device = gdk_x11_device_manager_lookup (device_manager, device_id);
         g_debug ("Device %d '%s' became active", gdk_x11_device_get_id (device), gdk_device_get_name (device));
         set_cursor_visibility (manager,
                                gdk_device_get_source (device) != GDK_SOURCE_TOUCHSCREEN);
