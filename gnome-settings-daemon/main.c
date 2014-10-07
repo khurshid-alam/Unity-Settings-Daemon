@@ -484,8 +484,8 @@ main (int argc, char *argv[])
 
         g_debug ("Shutting down");
 
-        if (xsync)
-                g_slice_free(GsdXSync, xsync);
+        /*(if (xsync)
+                g_slice_free(GsdXSync, xsync);*/
 
         if (name_id > 0) {
                 g_bus_unown_name (name_id);
