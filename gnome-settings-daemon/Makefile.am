@@ -114,7 +114,8 @@ gsd_SCRIPTS = \
 	unity-settings-daemon-localeexec
 
 EXTRA_DIST = \
-	unity-settings-daemon-localeexec.in
+	unity-settings-daemon-localeexec.in \
+	idle-monitor.xml
 
 unity-settings-daemon-localeexec: unity-settings-daemon-localeexec.in
 	$(AM_V_GEN) sed -e "s|\@libexecdir\@|$(libexecdir)|" -e "s|\@prefix\@|$(prefix)|"  $< > $@.tmp && mv $@.tmp $@
