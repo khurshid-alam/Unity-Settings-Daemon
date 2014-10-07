@@ -215,7 +215,7 @@ gsd_idle_monitor_handle_xevent (GsdIdleMonitor       *monitor,
 
   has_alarm = FALSE;
 
-  g_warning ("Handle event %p", monitor->alarms);
+  //g_warning ("Handle event %p", monitor->alarms);
   //sometimes we get events for disposed objects, bail if thats the case
   if (!monitor->alarms)
     return;
@@ -319,6 +319,7 @@ idle_monitor_watch_free (GsdIdleMonitorWatch *watch)
       watch->xalarm != None)
     {
       XSyncDestroyAlarm (monitor->display, watch->xalarm);
+      g_warning("alarms size %i",g_hash_table_size(monitor->alarms));
       g_hash_table_remove (monitor->alarms, (gpointer) watch->xalarm);
     }
 
@@ -364,18 +365,21 @@ gsd_idle_monitor_dispose (GObject *object)
 
   monitor = gsd_idle_monitor (object);
 
+  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+
   g_warning ("Disposing %p", monitor);
 
   g_clear_pointer (&monitor->watches, g_hash_table_destroy);
   g_clear_pointer (&monitor->alarms, g_hash_table_destroy);
 
+  g_warning ("w %p, a %p", monitor->watches, monitor->alarms);
   if (monitor->user_active_alarm != None)
     {
       XSyncDestroyAlarm (monitor->display, monitor->user_active_alarm);
       monitor->user_active_alarm = None;
     }
 
-  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+  
 
   G_OBJECT_CLASS (gsd_idle_monitor_parent_class)->dispose (object);
 }
@@ -647,8 +651,10 @@ gsd_idle_monitor_remove_watch (GsdIdleMonitor *monitor,
   g_return_if_fail (GSD_IS_IDLE_MONITOR (monitor));
 
   g_object_ref (monitor);
+  g_warning("size: %i", g_hash_table_size(monitor->watches));
   g_hash_table_remove (monitor->watches,
                        GUINT_TO_POINTER (id));
+  
   g_object_unref (monitor);
 }
 
@@ -728,6 +734,9 @@ name_vanished_callback (GDBusConnection *connection,
   DBusWatch *watch = user_data;
 
   gsd_idle_monitor_remove_watch (watch->monitor, watch->watch_id);
+
+  if (xsync)
+    g_slice_free(GsdXSync, xsync);
 }
 
 static DBusWatch *
