@@ -844,6 +844,7 @@ on_device_added (GdkDeviceManager         *device_manager,
 
   device_id = gdk_x11_device_get_id (device);
   monitor = gsd_idle_monitor_get_for_device (device_id);
+  g_object_ref(monitor);
   path = g_strdup_printf ("/org/gnome/Mutter/IdleMonitor/Device%d", device_id);
 
   create_monitor_skeleton (manager, monitor, path);
@@ -858,12 +859,13 @@ on_device_removed (GdkDeviceManager         *device_manager,
   int device_id;
   char *path;
 
-  g_warning ("removing device %i", device_d);
+  g_warning ("removing device %i", device_id);
   device_id = gdk_x11_device_get_id (device);
   path = g_strdup_printf ("/org/gnome/Mutter/IdleMonitor/Device%d", device_id);
   g_dbus_object_manager_server_unexport (manager, path);
   g_free (path);
 
+  g_object_unref(device_monitors[device_id]);
   g_clear_object (&device_monitors[device_id]);
   if (device_id == device_id_max)
     device_id_max--;
