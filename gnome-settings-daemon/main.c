@@ -31,7 +31,11 @@
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
+#include <gdk/gdk.h>
+#include <gdk/gdkx.h>
 #include <libnotify/notify.h>
+#include <X11/Xlib.h>
+#include <X11/extensions/sync.h>
 
 #include "gnome-settings-manager.h"
 #include "gnome-settings-plugin.h"
@@ -460,11 +464,14 @@ parse_args (int *argc, char ***argv)
 static void
 init_xsync (void)
 {
-#ifdef HAVE_XSYNC
-  {
     int major, minor;
-
+    if (!xsync) {
+        g_warning("init failed");
+        xsync = g_slice_new0 (GsdXSync);
+    }
+    g_warning("Display %d", GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()));
     xsync->display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
+    g_warning("Display %d", xsync->display);
     xsync->have_xsync = FALSE;
 
     xsync->sync_error_base = 0;
@@ -493,10 +500,6 @@ init_xsync (void)
                   major, minor,
                   xsync->sync_error_base,
                   xsync->sync_event_base);
-  }
-#else  /* HAVE_XSYNC */
-  g_warning ("Not compiled with Xsync support\n");
-#endif /* !HAVE_XSYNC */
 }
 
 int
@@ -508,6 +511,7 @@ main (int argc, char *argv[])
         bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
         textdomain (GETTEXT_PACKAGE);
         setlocale (LC_ALL, "");
+        xsync = g_slice_new0 (GsdXSync);
 
         parse_args (&argc, &argv);
 
@@ -528,7 +532,7 @@ main (int argc, char *argv[])
                 g_timeout_add_seconds (30, (GSourceFunc) timed_exit_cb, NULL);
         }
 
-        xsync = g_slice_new0 (GsdXSync);
+        
         init_xsync();
         gsd_idle_monitor_init_dbus (replace);
 
