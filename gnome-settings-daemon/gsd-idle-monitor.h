@@ -60,6 +60,10 @@ GType              gsd_idle_monitor_get_type     (void);
 GsdIdleMonitor * gsd_idle_monitor_new          (void);
 GsdIdleMonitor * gsd_idle_monitor_new_for_device (GdkDevice *device);
 
+GsdIdleMonitor *gsd_idle_monitor_get_core (void);
+GsdIdleMonitor *gsd_idle_monitor_get_for_device (int device_id);
+
+
 guint              gsd_idle_monitor_add_idle_watch    (GsdIdleMonitor         *monitor,
 							 guint64                   interval_msec,
 							 GsdIdleMonitorWatchFunc callback,
