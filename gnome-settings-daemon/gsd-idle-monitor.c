@@ -903,7 +903,7 @@ on_name_acquired (GDBusConnection *connection,
                   const char      *name,
                   gpointer         user_data)
 {
-  g_warning ("Acquired name %s\n", name);
+  g_debug ("Acquired name %s\n", name);
 }
 
 static void
@@ -911,7 +911,7 @@ on_name_lost (GDBusConnection *connection,
               const char      *name,
               gpointer         user_data)
 {
-  g_warning ("Lost or failed to acquire name %s\n", name);
+  g_debug ("Lost or failed to acquire name %s\n", name);
 
   //mainloop_quit();
 }
