@@ -348,8 +348,6 @@ init_xsync (GsdIdleMonitor *monitor)
     }
 
   monitor->user_active_alarm = _xsync_alarm_set (monitor, XSyncNegativeTransition, 1, FALSE);
-
-  gdk_window_add_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
 }
 
 static void
@@ -358,8 +356,6 @@ gsd_idle_monitor_dispose (GObject *object)
   GsdIdleMonitor *monitor;
 
   monitor = gsd_idle_monitor (object);
-
-  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
 
   g_clear_pointer (&monitor->watches, g_hash_table_destroy);
   g_clear_pointer (&monitor->alarms, g_hash_table_destroy);
@@ -896,6 +892,8 @@ on_bus_acquired (GDBusConnection *connection,
                            G_CALLBACK (on_device_removed), manager, 0);
 
   g_dbus_object_manager_server_set_connection (manager, connection);
+
+  gdk_window_add_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
 }
 
 static void
@@ -913,6 +911,7 @@ on_name_lost (GDBusConnection *connection,
 {
   g_debug ("Lost or failed to acquire name %s\n", name);
 
+  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
   //mainloop_quit();
 }
 
