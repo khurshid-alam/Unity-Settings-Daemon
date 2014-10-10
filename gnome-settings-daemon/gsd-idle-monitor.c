@@ -366,7 +366,7 @@ gsd_idle_monitor_dispose (GObject *object)
       monitor->user_active_alarm = None;
     }
 
-  
+  device_monitors[monitor->device_id] = NULL;  
 
   G_OBJECT_CLASS (gsd_idle_monitor_parent_class)->dispose (object);
 }
