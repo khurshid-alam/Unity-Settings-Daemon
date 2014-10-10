@@ -914,7 +914,7 @@ on_name_lost (GDBusConnection *connection,
 {
   g_debug ("Lost or failed to acquire name %s\n", name);
 
-  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, NULL);
   //mainloop_quit();
 }
 
