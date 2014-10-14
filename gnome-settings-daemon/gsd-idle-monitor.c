@@ -912,7 +912,7 @@ on_name_lost (GDBusConnection *connection,
               const char      *name,
               gpointer         user_data)
 {
-  g_debug ("Lost or failed to acquire name %s\n", name);
+  g_warning ("Lost or failed to acquire name %s\n", name);
 
   gdk_window_remove_filter (NULL, xevent_filter, NULL);
 }
