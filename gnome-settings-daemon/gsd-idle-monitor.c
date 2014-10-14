@@ -323,8 +323,8 @@ idle_monitor_watch_free (GsdIdleMonitorWatch *watch)
 
 GdkFilterReturn
 xevent_filter (GdkXEvent *xevent,
-               GdkEvent *event,
-               GsdIdleMonitor *monitor)
+               GdkEvent  *event,
+               gpointer   user_data)
 {
   XEvent *ev;
 
@@ -896,7 +896,7 @@ on_bus_acquired (GDBusConnection *connection,
 
   g_dbus_object_manager_server_set_connection (manager, connection);
 
-  gdk_window_add_filter (NULL, (GdkFilterFunc)xevent_filter, monitor);
+  gdk_window_add_filter (NULL, xevent_filter, NULL);
 }
 
 static void
@@ -914,8 +914,7 @@ on_name_lost (GDBusConnection *connection,
 {
   g_debug ("Lost or failed to acquire name %s\n", name);
 
-  gdk_window_remove_filter (NULL, (GdkFilterFunc)xevent_filter, NULL);
-  //mainloop_quit();
+  gdk_window_remove_filter (NULL, xevent_filter, NULL);
 }
 
 static void
