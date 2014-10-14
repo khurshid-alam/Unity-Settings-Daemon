@@ -830,7 +830,6 @@ on_device_added (GdkDeviceManager         *device_manager,
   int device_id;
   char *path;
 
-  g_object_ref(device);
   device_id = gdk_x11_device_get_id (device);
   monitor = gsd_idle_monitor_get_for_device (device_id);
   g_object_ref(monitor);
