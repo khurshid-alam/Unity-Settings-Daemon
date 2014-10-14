@@ -179,7 +179,7 @@ add_device (GdkDeviceManager *device_manager,
         }
         g_hash_table_insert (manager->priv->monitors,
                              device,
-                             monitor);
+                             g_object_ref (monitor));
         gsd_idle_monitor_add_user_active_watch (monitor,
                                                 monitor_became_active,
                                                 manager,
