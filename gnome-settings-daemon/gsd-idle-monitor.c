@@ -321,7 +321,7 @@ idle_monitor_watch_free (GsdIdleMonitorWatch *watch)
   g_slice_free (GsdIdleMonitorWatch, watch);
 }
 
-GdkFilterReturn
+static GdkFilterReturn
 xevent_filter (GdkXEvent *xevent,
                GdkEvent  *event,
                gpointer   user_data)
