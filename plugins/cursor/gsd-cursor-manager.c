@@ -147,8 +147,6 @@ monitor_became_active (GsdIdleMonitor *monitor,
         /* Make sure that all the other devices are watched
          * (but not the one we just stopped monitoring */
         add_all_devices (manager, device, NULL);
-
-        g_object_unref (device);
 }
 
 static gboolean
