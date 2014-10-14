@@ -366,7 +366,9 @@ gsd_idle_monitor_dispose (GObject *object)
       monitor->user_active_alarm = None;
     }
 
-  device_monitors[monitor->device_id] = NULL;  
+  /* The device in device_monitors is cleared when the device is
+   * removed. Ensure that the object is not deleted before that. */
+  g_assert_null (device_monitors[monitor->device_id]);
 
   G_OBJECT_CLASS (gsd_idle_monitor_parent_class)->dispose (object);
 }
@@ -851,7 +853,6 @@ on_device_removed (GdkDeviceManager         *device_manager,
   g_dbus_object_manager_server_unexport (manager, path);
   g_free (path);
 
-  g_object_unref(device_monitors[device_id]);
   g_clear_object (&device_monitors[device_id]);
   if (device_id == device_id_max)
     device_id_max--;
