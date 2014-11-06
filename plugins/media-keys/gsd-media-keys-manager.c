@@ -257,6 +257,14 @@ static const char *volume_icons[] = {
         NULL
 };
 
+static const char *mic_volume_icons[] = {
+        "microphone-sensitivity-muted-symbolic",
+        "microphone-sensitivity-low-symbolic",
+        "microphone-sensitivity-medium-symbolic",
+        "microphone-sensitivity-high-symbolic",
+        NULL
+};
+
 static const char *brightness_icons[] = {
         "notification-display-brightness-off",
 	"notification-display-brightness-low",
@@ -343,10 +351,13 @@ ubuntu_osd_do_notification (NotifyNotification **notification,
 static gboolean
 ubuntu_osd_notification_show_volume (GsdMediaKeysManager *manager,
                                      gint value,
-                                     gboolean muted)
+                                     gboolean muted,
+                                     gboolean is_mic)
 {
+        const char **icons_name = is_mic ? mic_volume_icons : volume_icons;
+
         return ubuntu_osd_do_notification (&manager->priv->volume_notification,
-                                           "volume", value, muted, volume_icons);
+                                           "volume", value, muted, icons_name);
 }
 
 static gboolean
@@ -1337,7 +1348,7 @@ update_dialog (GsdMediaKeysManager *manager,
         const GvcMixerStreamPort *port;
         const char *icon;
 
-        if (ubuntu_osd_notification_show_volume (manager, vol, muted))
+        if (ubuntu_osd_notification_show_volume (manager, vol, muted, !GVC_IS_MIXER_SINK (stream)))
                 goto done;
 
         vol = CLAMP (vol, 0, 100);
