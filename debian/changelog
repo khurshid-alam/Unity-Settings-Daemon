@@ -1,4 +1,4 @@
-unity-settings-daemon (15.04.0+15.10.20141030-0ubuntu2) UNRELEASED; urgency=medium
+unity-settings-daemon (15.04.1+15.04.20141030-0ubuntu2) UNRELEASED; urgency=medium
 
   * Add patch from Tim Lunn to support upower 0.99 properly. (LP: #1394063)
 
