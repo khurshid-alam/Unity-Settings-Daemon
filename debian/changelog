@@ -1,3 +1,104 @@
+unity-settings-daemon (15.04.1+15.04.20150205-0ubuntu1) vivid; urgency=medium
+
+  [ Sebastien Bacher ]
+  * housekeeping: set labels width, so they wrap instead of stretching
+    the dialog
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 05 Feb 2015 11:19:40 +0000
+
+unity-settings-daemon (15.04.1+15.04.20150107-0ubuntu1) vivid; urgency=low
+
+  [ Hui Wang ]
+  * show correct microphone mute icon (LP: #1381856, #1389099)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Wed, 07 Jan 2015 16:55:42 +0000
+
+unity-settings-daemon (15.04.1+15.04.20141128-0ubuntu1) vivid; urgency=low
+
+  [ Bastien Nocera ]
+  * Remove recall check, upower doesn't support this any more and it was
+    causing a crash. (LP: #1397135)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Fri, 28 Nov 2014 09:48:43 +0000
+
+unity-settings-daemon (15.04.1+15.04.20141127-0ubuntu1) vivid; urgency=medium
+
+  [ Iain Lane ]
+  * Add patch from Tim Lunn to support upower 0.99 properly. (LP: #1394063)
+
+  [ Dmitry Shachnev ]
+  * Add Gtk/DecorationLayout XSettings export (based on
+    org.gnome.desktop.wm.preferences button-layout GSettings key).
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Thu, 27 Nov 2014 11:42:11 +0000
+
+unity-settings-daemon (15.04.0+15.10.20141030-0ubuntu1) vivid; urgency=medium
+
+  [ Tim Lunn ]
+  * Query logind instead of upower for "can suspend/hibernate", and rebuild
+    against upower 0.99. (LP: #1330037)
+
+  [ Martin Pitt ]
+  * Add missing Vcs-Bzr: control field.
+
+ -- Martin Pitt <martin.pitt@ubuntu.com>  Thu, 30 Oct 2014 17:29:53 +0100
+
+unity-settings-daemon (14.04.0+14.10.20141014-0ubuntu1) utopic; urgency=low
+
+  [ Lars Uebernickel ]
+  * Idle monitor: fix ref counting bugs (LP: #1380278)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Tue, 14 Oct 2014 15:25:59 +0000
+
+unity-settings-daemon (14.04.0+14.10.20141010-0ubuntu1) utopic; urgency=low
+
+  [ Tim Lunn ]
+  * Copy in Idle Monitor from 3.10 and hook up dbus interface (LP:
+    #1377847)
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Fri, 10 Oct 2014 08:06:04 +0000
+
+unity-settings-daemon (14.04.0+14.10.20140922-0ubuntu3) utopic; urgency=medium
+
+  * Rebuild for gnome-desktop 3.12 (LP: #1372346)
+  * debian/control: Drop depends gnome-settings-daemon-schemas (<< 3.10),
+    gnome-settings-daemon 3.12 reverts all removed keys 
+  * Fix merge of git patch for  xkb get/free info_vars
+
+ -- Tim Lunn <tim@feathertop.org>  Mon, 29 Sep 2014 20:05:27 +1000
+
+unity-settings-daemon (14.04.0+14.10.20140922-0ubuntu2) utopic; urgency=medium
+
+  * debian/control:
+    - Move -dev dependencies from libunity-settings-daemon1 to
+      libunity-settings-daemon-dev and add it to the correct section
+      (LP: #1372728)
+
+ -- Robert Ancell <robert.ancell@canonical.com>  Wed, 24 Sep 2014 15:38:13 +1200
+
+unity-settings-daemon (14.04.0+14.10.20140922-0ubuntu1) utopic; urgency=low
+
+  [ Robert Ancell ]
+  * Move libgnome-desktop RandR code into u-s-d since newer versions
+    remove this unstable API (LP: #1372240)
+
+  [ Rui Matos ]
+  * Apply git patch that pulls in code removed from gnome-desktop3 3.12
+
+  [ Bastien Nocera ]
+  * common: Check the exit status of hotplug scripts correctly
+
+  [ Tim Lunn ]
+  * Apply git patch that pulls in code removed from gnome-desktop3 3.12
+
+ -- Ubuntu daily release <ps-jenkins@lists.canonical.com>  Mon, 22 Sep 2014 11:29:11 +0000
+
+unity-settings-daemon (14.04.0+14.10.20140605-0ubuntu2) utopic; urgency=medium
+
+  * No-change rebuild against new colord
+
+ -- Iain Lane <iain@orangesquash.org.uk>  Tue, 10 Jun 2014 11:36:54 +0100
+
 unity-settings-daemon (14.04.0+14.10.20140605-0ubuntu1) utopic; urgency=low
 
   [ Alberto Milone ]

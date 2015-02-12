@@ -30,7 +30,7 @@ Build-Depends: cdbs,
                libaccountsservice-dev (>= 0.6.34),
                libappindicator3-dev (>= 0.4.90),
                hwdata,
-               libupower-glib-dev (>= 0.9.11),
+               libupower-glib-dev (>= 0.99.1),
                libcolord-dev (>= 0.1.12),
                liblcms2-dev,
                libnss3-dev,
@@ -43,7 +43,11 @@ Build-Depends: cdbs,
                libibus-1.0-dev (>= 1.5.0),
                fcitx-libs-dev,
                gperf,
+               libgl1-mesa-dev,
+               libxkbfile-dev,
+               xkb-data,
 Standards-Version: 3.9.3
+Vcs-Bzr: https://code.launchpad.net/~unity-settings-daemon-team/unity-settings-daemon/trunk
 
 Package: unity-settings-daemon
 Architecture: any
@@ -53,7 +57,6 @@ Depends: ${shlibs:Depends},
          gsettings-desktop-schemas (>= 3.7.2.1),
          nautilus-data (>= 2.91.3-1),
          gnome-settings-daemon-schemas (>= 3.8), 
-         gnome-settings-daemon-schemas (<< 3.10),
          gsettings-ubuntu-schemas (>= 0.0.1+14.04.20140224),
 Recommends: fcitx-data,
             ibus (>= 1.5.0),
@@ -98,3 +101,21 @@ Depends: ${shlibs:Depends},
 Description: Headers for building applications communicating with unity-settings-daemon
  This package contains header files required to build applications that
  communicate with the Unity settings daemon over D-Bus.
+
+Package: libunity-settings-daemon1
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: Helper library for accessing settings
+ This package contains a helper library for unity-control-center
+
+Package: libunity-settings-daemon-dev
+Section: libdevel
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libunity-settings-daemon1 (= ${binary:Version}),
+         libglib2.0-dev,
+         libgtk-3-dev
+Description: Helper library for accessing settings (development files)
+ This package contains a headers for using libunity-settings-daemon

@@ -34,10 +34,6 @@
 #include <glib-unix.h>
 #include <gio/gunixfdlist.h>
 
-#define GNOME_DESKTOP_USE_UNSTABLE_API
-#include <libgnome-desktop/gnome-rr.h>
-#include <libgnome-desktop/gnome-idle-monitor.h>
-
 #include <gsd-input-helper.h>
 
 #include "gsd-power-constants.h"
@@ -50,6 +46,8 @@
 #include "gnome-settings-session.h"
 #include "gsd-enums.h"
 #include "gsd-power-manager.h"
+#include "gsd-rr.h"
+#include "gsd-idle-monitor.h"
 
 #define GNOME_SESSION_DBUS_NAME                 "org.gnome.SessionManager"
 #define GNOME_SESSION_DBUS_PATH_PRESENCE        "/org/gnome/SessionManager/Presence"
@@ -77,7 +75,6 @@
 #define GSD_POWER_MANAGER_NOTIFY_TIMEOUT_SHORT          10 * 1000 /* ms */
 #define GSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG           30 * 1000 /* ms */
 
-#define GSD_POWER_MANAGER_RECALL_DELAY                  30 /* seconds */
 #define GSD_POWER_MANAGER_LID_CLOSE_SAFETY_TIMEOUT      30 /* seconds */
 
 #define SYSTEMD_DBUS_NAME                       "org.freedesktop.login1"
@@ -181,7 +178,7 @@ struct GsdPowerManagerPrivate
         GIcon                   *previous_icon;
         GPtrArray               *devices_array;
         UpDevice                *device_composite;
-        GnomeRRScreen           *rr_screen;
+        GsdRRScreen           *rr_screen;
         NotifyNotification      *notification_ups_discharging;
         NotifyNotification      *notification_low;
         NotifyNotification      *notification_sleep_warning;
@@ -214,7 +211,7 @@ struct GsdPowerManagerPrivate
         gboolean                 is_virtual_machine;
 
         /* Idles */
-        GnomeIdleMonitor        *idle_monitor;
+        GsdIdleMonitor          *idle_monitor;
         guint                    idle_dim_id;
         guint                    idle_blank_id;
         guint                    idle_sleep_warning_id;
@@ -244,10 +241,11 @@ static void      do_lid_closed_action (GsdPowerManager *manager);
 static void      inhibit_lid_switch (GsdPowerManager *manager);
 static void      uninhibit_lid_switch (GsdPowerManager *manager);
 static void      main_battery_or_ups_low_changed (GsdPowerManager *manager, gboolean is_low);
+static void      device_properties_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager);
 static gboolean  idle_is_session_inhibited (GsdPowerManager *manager, guint mask, gboolean *is_inhibited);
 static void      idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode);
-static void      idle_triggered_idle_cb (GnomeIdleMonitor *monitor, guint watch_id, gpointer user_data);
-static void      idle_became_active_cb (GnomeIdleMonitor *monitor, guint watch_id, gpointer user_data);
+static void      idle_triggered_idle_cb (GsdIdleMonitor *monitor, guint watch_id, gpointer user_data);
+static void      idle_became_active_cb (GsdIdleMonitor *monitor, guint watch_id, gpointer user_data);
 
 G_DEFINE_TYPE (GsdPowerManager, gsd_power_manager, G_TYPE_OBJECT)
 
@@ -858,146 +856,9 @@ out:
         return device;
 }
 
-typedef struct {
-        GsdPowerManager *manager;
-        UpDevice        *device;
-} GsdPowerManagerRecallData;
-
-static void
-device_perhaps_recall_response_cb (GtkDialog *dialog,
-                                   gint response_id,
-                                   GsdPowerManagerRecallData *recall_data)
-{
-        GdkScreen *screen;
-        GtkWidget *dialog_error;
-        GError *error = NULL;
-        gboolean ret;
-        gchar *website = NULL;
-
-        /* don't show this again */
-        if (response_id == GTK_RESPONSE_CANCEL) {
-                g_settings_set_boolean (recall_data->manager->priv->settings,
-                                        "notify-perhaps-recall",
-                                        FALSE);
-                goto out;
-        }
-
-        /* visit recall website */
-        if (response_id == GTK_RESPONSE_OK) {
-
-                g_object_get (recall_data->device,
-                              "recall-url", &website,
-                              NULL);
-
-                screen = gdk_screen_get_default();
-                ret = gtk_show_uri (screen,
-                                    website,
-                                    gtk_get_current_event_time (),
-                                    &error);
-                if (!ret) {
-                        dialog_error = gtk_message_dialog_new (NULL,
-                                                               GTK_DIALOG_MODAL,
-                                                               GTK_MESSAGE_INFO,
-                                                               GTK_BUTTONS_OK,
-                                                               "Failed to show url %s",
-                                                               error->message);
-                        gtk_dialog_run (GTK_DIALOG (dialog_error));
-                        g_error_free (error);
-                }
-        }
-out:
-        gtk_widget_destroy (GTK_WIDGET (dialog));
-        g_object_unref (recall_data->device);
-        g_object_unref (recall_data->manager);
-        g_free (recall_data);
-        g_free (website);
-        return;
-}
-
-static gboolean
-device_perhaps_recall_delay_cb (gpointer user_data)
-{
-        gchar *vendor;
-        const gchar *title = NULL;
-        GString *message = NULL;
-        GtkWidget *dialog;
-        GsdPowerManagerRecallData *recall_data = (GsdPowerManagerRecallData *) user_data;
-
-        g_object_get (recall_data->device,
-                      "recall-vendor", &vendor,
-                      NULL);
-
-        /* TRANSLATORS: the battery may be recalled by its vendor */
-        title = _("Battery may be recalled");
-        message = g_string_new ("");
-        g_string_append_printf (message,
-                                _("A battery in your computer may have been "
-                                  "recalled by %s and you may be at risk."), vendor);
-        g_string_append (message, "\n\n");
-        g_string_append (message, _("For more information visit the battery recall website."));
-        dialog = gtk_message_dialog_new_with_markup (NULL,
-                                                     GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                     GTK_MESSAGE_INFO,
-                                                     GTK_BUTTONS_CLOSE,
-                                                     "<span size='larger'><b>%s</b></span>",
-                                                     title);
-        gtk_message_dialog_format_secondary_markup (GTK_MESSAGE_DIALOG (dialog),
-                                                    "%s", message->str);
-
-        /* TRANSLATORS: button text, visit the manufacturers recall website */
-        gtk_dialog_add_button (GTK_DIALOG (dialog), _("Visit recall website"),
-                               GTK_RESPONSE_OK);
-
-        /* TRANSLATORS: button text, do not show this bubble again */
-        gtk_dialog_add_button (GTK_DIALOG (dialog), _("Do not show me this again"),
-                               GTK_RESPONSE_CANCEL);
-
-        gtk_widget_show (dialog);
-        g_signal_connect (dialog, "response",
-                          G_CALLBACK (device_perhaps_recall_response_cb),
-                          recall_data);
-
-        g_string_free (message, TRUE);
-        g_free (vendor);
-        return FALSE;
-}
-
-static void
-device_perhaps_recall (GsdPowerManager *manager, UpDevice *device)
-{
-        gboolean ret;
-        guint timer_id;
-        GsdPowerManagerRecallData *recall_data;
-
-        /* don't show when running under GDM */
-        if (g_getenv ("RUNNING_UNDER_GDM") != NULL) {
-                g_debug ("running under gdm, so no notification");
-                return;
-        }
-
-        /* already shown, and dismissed */
-        ret = g_settings_get_boolean (manager->priv->settings,
-                                      "notify-perhaps-recall");
-        if (!ret) {
-                g_debug ("settings prevents recall notification");
-                return;
-        }
-
-        recall_data = g_new0 (GsdPowerManagerRecallData, 1);
-        recall_data->manager = g_object_ref (manager);
-        recall_data->device = g_object_ref (device);
-
-        /* delay by a few seconds so the session can load */
-        timer_id = g_timeout_add_seconds (GSD_POWER_MANAGER_RECALL_DELAY,
-                                          device_perhaps_recall_delay_cb,
-                                          recall_data);
-        g_source_set_name_by_id (timer_id, "[GsdPowerManager] perhaps-recall");
-}
-
 static void
 engine_device_add (GsdPowerManager *manager, UpDevice *device)
 {
-        gboolean recall_notice;
         GsdPowerManagerWarning warning;
         UpDeviceState state;
         UpDeviceKind kind;
@@ -1013,7 +874,6 @@ engine_device_add (GsdPowerManager *manager, UpDevice *device)
         g_object_get (device,
                       "kind", &kind,
                       "state", &state,
-                      "recall-notice", &recall_notice,
                       NULL);
 
         /* add old state for transitions */
@@ -1038,42 +898,12 @@ engine_device_add (GsdPowerManager *manager, UpDevice *device)
                                    GUINT_TO_POINTER(state));
         }
 
-        /* the device is recalled */
-        if (recall_notice)
-                device_perhaps_recall (manager, device);
-}
+        g_ptr_array_add (manager->priv->devices_array, g_object_ref(device));
 
-static gboolean
-engine_check_recall (GsdPowerManager *manager, UpDevice *device)
-{
-        UpDeviceKind kind;
-        gboolean recall_notice = FALSE;
-        gchar *recall_vendor = NULL;
-        gchar *recall_url = NULL;
-
-        /* get device properties */
-        g_object_get (device,
-                      "kind", &kind,
-                      "recall-notice", &recall_notice,
-                      "recall-vendor", &recall_vendor,
-                      "recall-url", &recall_url,
-                      NULL);
-
-        /* not battery */
-        if (kind != UP_DEVICE_KIND_BATTERY)
-                goto out;
-
-        /* no recall data */
-        if (!recall_notice)
-                goto out;
-
-        /* emit signal for manager */
-        g_debug ("** EMIT: perhaps-recall");
-        g_debug ("%s-%s", recall_vendor, recall_url);
-out:
-        g_free (recall_vendor);
-        g_free (recall_url);
-        return recall_notice;
+        g_signal_connect (device, "notify::state",
+                          G_CALLBACK (device_properties_changed_cb), manager);
+        g_signal_connect (device, "notify::warning-level",
+                          G_CALLBACK (device_properties_changed_cb), manager);
 }
 
 static gboolean
@@ -1085,14 +915,6 @@ engine_coldplug (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        /* get devices from UPower */
-        ret = up_client_enumerate_devices_sync (manager->priv->up_client, NULL, &error);
-        if (!ret) {
-                g_warning ("failed to get device list: %s", error->message);
-                g_error_free (error);
-                goto out;
-        }
-
         engine_recalculate_state (manager);
 
         /* add to database */
@@ -1103,7 +925,6 @@ engine_coldplug (GsdPowerManager *manager)
         for (i=0;i<array->len;i++) {
                 device = g_ptr_array_index (array, i);
                 engine_device_add (manager, device);
-                engine_check_recall (manager, device);
         }
 out:
         if (array != NULL)
@@ -1117,19 +938,23 @@ engine_device_added_cb (UpClient *client, UpDevice *device, GsdPowerManager *man
 {
         /* add to list */
         g_ptr_array_add (manager->priv->devices_array, g_object_ref (device));
-        engine_check_recall (manager, device);
 
         engine_recalculate_state (manager);
 }
 
 static void
-engine_device_removed_cb (UpClient *client, UpDevice *device, GsdPowerManager *manager)
+engine_device_removed_cb (UpClient *client, const char *object_path, GsdPowerManager *manager)
 {
-        gboolean ret;
-        ret = g_ptr_array_remove (manager->priv->devices_array, device);
-        if (!ret)
-                return;
-        engine_recalculate_state (manager);
+        guint i;
+
+        for (i = 0; i < manager->priv->devices_array->len; i++) {
+                UpDevice *device = g_ptr_array_index (manager->priv->devices_array, i);
+
+                if (g_strcmp0 (object_path, up_device_get_object_path (device)) == 0) {
+                        g_ptr_array_remove_index (manager->priv->devices_array, i);
+                        break;
+                }
+        }
 }
 
 static void
@@ -1245,17 +1070,39 @@ manager_critical_action_get (GsdPowerManager *manager,
                              gboolean         is_ups)
 {
         GsdPowerActionType policy;
+        GVariant *result = NULL;
 
         policy = g_settings_get_enum (manager->priv->settings, "critical-battery-action");
+
         if (policy == GSD_POWER_ACTION_SUSPEND) {
-                if (is_ups == FALSE &&
-                    up_client_get_can_suspend (manager->priv->up_client))
-                        return policy;
-                return GSD_POWER_ACTION_SHUTDOWN;
+                if (is_ups == FALSE) {
+                        result = g_dbus_proxy_call_sync (manager->priv->logind_proxy,
+                                                         "CanSuspend",
+                                                         NULL,
+                                                         G_DBUS_CALL_FLAGS_NONE,
+                                                         -1, NULL, NULL);
+                }
         } else if (policy == GSD_POWER_ACTION_HIBERNATE) {
-                if (up_client_get_can_hibernate (manager->priv->up_client))
-                        return policy;
-                return GSD_POWER_ACTION_SHUTDOWN;
+                result = g_dbus_proxy_call_sync (manager->priv->logind_proxy,
+                                                 "CanHibernate",
+                                                 NULL,
+                                                 G_DBUS_CALL_FLAGS_NONE,
+                                                 -1, NULL, NULL);
+        } else {
+                /* Other actions need no check */
+                return policy;
+        }
+
+        if (result) {
+                const char *s;
+
+                g_variant_get (result, "(s)", &s);
+                if (g_strcmp0 (s, "yes") != 0)
+                        policy = GSD_POWER_ACTION_SHUTDOWN;
+
+                g_variant_unref (result);
+        } else {
+                policy = GSD_POWER_ACTION_SHUTDOWN;
         }
 
         return policy;
@@ -1765,7 +1612,7 @@ out:
 }
 
 static void
-engine_device_changed_cb (UpClient *client, UpDevice *device, GsdPowerManager *manager)
+device_properties_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager)
 {
         UpDeviceKind kind;
         UpDeviceState state;
@@ -1989,8 +1836,8 @@ backlight_enable (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        ret = gnome_rr_screen_set_dpms_mode (manager->priv->rr_screen,
-                                             GNOME_RR_DPMS_ON,
+        ret = gsd_rr_screen_set_dpms_mode (manager->priv->rr_screen,
+                                             GSD_RR_DPMS_ON,
                                              &error);
         if (!ret) {
                 g_warning ("failed to turn the panel on: %s",
@@ -2007,8 +1854,8 @@ backlight_disable (GsdPowerManager *manager)
         gboolean ret;
         GError *error = NULL;
 
-        ret = gnome_rr_screen_set_dpms_mode (manager->priv->rr_screen,
-                                             GNOME_RR_DPMS_OFF,
+        ret = gsd_rr_screen_set_dpms_mode (manager->priv->rr_screen,
+                                             GSD_RR_DPMS_OFF,
                                              &error);
         if (!ret) {
                 g_warning ("failed to turn the panel off: %s",
@@ -2267,7 +2114,7 @@ do_lid_closed_action (GsdPowerManager *manager)
                          NULL);
 
         /* refresh RANDR so we get an accurate view of what monitors are plugged in when the lid is closed */
-        gnome_rr_screen_refresh (manager->priv->rr_screen, NULL); /* NULL-GError */
+        gsd_rr_screen_refresh (manager->priv->rr_screen, NULL); /* NULL-GError */
 
         restart_inhibit_lid_switch_timer (manager);
 
@@ -2291,7 +2138,7 @@ do_lid_closed_action (GsdPowerManager *manager)
 }
 
 static void
-up_client_changed_cb (UpClient *client, GsdPowerManager *manager)
+lid_state_changed_cb (UpClient *client, GParamSpec *pspec, GsdPowerManager *manager)
 {
         gboolean tmp;
 
@@ -2501,10 +2348,10 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
         /* if we're moving to an idle mode, make sure
          * we add a watch to take us back to normal */
         if (mode != GSD_POWER_IDLE_MODE_NORMAL) {
-                gnome_idle_monitor_add_user_active_watch (manager->priv->idle_monitor,
-                                                          idle_became_active_cb,
-                                                          manager,
-                                                          NULL);
+                gsd_idle_monitor_add_user_active_watch (manager->priv->idle_monitor,
+                                                        idle_became_active_cb,
+                                                        manager,
+                                                        NULL);
         }
 
         /* save current brightness, and set dim level */
@@ -2631,12 +2478,12 @@ idle_is_session_inhibited (GsdPowerManager  *manager,
 }
 
 static void
-clear_idle_watch (GnomeIdleMonitor *monitor,
-                  guint            *id)
+clear_idle_watch (GsdIdleMonitor *monitor,
+                  guint          *id)
 {
         if (*id == 0)
                 return;
-        gnome_idle_monitor_remove_watch (monitor, *id);
+        gsd_idle_monitor_remove_watch (monitor, *id);
         *id = 0;
 }
 
@@ -2692,9 +2539,9 @@ idle_configure (GsdPowerManager *manager)
         if (timeout_blank != 0) {
                 g_debug ("setting up blank callback for %is", timeout_blank);
 
-                manager->priv->idle_blank_id = gnome_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
-                                                                                  timeout_blank * 1000,
-                                                                                  idle_triggered_idle_cb, manager, NULL);
+                manager->priv->idle_blank_id = gsd_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
+                                                                                timeout_blank * 1000,
+                                                                                idle_triggered_idle_cb, manager, NULL);
         }
 
         /* only do the sleep timeout when the session is idle
@@ -2715,9 +2562,9 @@ idle_configure (GsdPowerManager *manager)
         if (timeout_sleep != 0) {
                 g_debug ("setting up sleep callback %is", timeout_sleep);
 
-                manager->priv->idle_sleep_id = gnome_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
-                                                                                  timeout_sleep * 1000,
-                                                                                  idle_triggered_idle_cb, manager, NULL);
+                manager->priv->idle_sleep_id = gsd_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
+                                                                                timeout_sleep * 1000,
+                                                                                idle_triggered_idle_cb, manager, NULL);
                 if (action_type == GSD_POWER_ACTION_LOGOUT ||
                     action_type == GSD_POWER_ACTION_SUSPEND ||
                     action_type == GSD_POWER_ACTION_HIBERNATE) {
@@ -2730,9 +2577,9 @@ idle_configure (GsdPowerManager *manager)
 
                         g_debug ("setting up sleep warning callback %is", timeout_sleep_warning);
 
-                        manager->priv->idle_sleep_warning_id = gnome_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
-                                                                                                  timeout_sleep_warning * 1000,
-                                                                                                  idle_triggered_idle_cb, manager, NULL);
+                        manager->priv->idle_sleep_warning_id = gsd_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
+                                                                                                timeout_sleep_warning * 1000,
+                                                                                                idle_triggered_idle_cb, manager, NULL);
                 }
         }
 
@@ -2772,9 +2619,9 @@ idle_configure (GsdPowerManager *manager)
         if (timeout_dim != 0) {
                 g_debug ("setting up dim callback for %is", timeout_dim);
 
-                manager->priv->idle_dim_id = gnome_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
-                                                                                timeout_dim * 1000,
-                                                                                idle_triggered_idle_cb, manager, NULL);
+                manager->priv->idle_dim_id = gsd_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
+                                                                              timeout_dim * 1000,
+                                                                              idle_triggered_idle_cb, manager, NULL);
         }
 }
 
@@ -3106,9 +2953,9 @@ show_sleep_warning (GsdPowerManager *manager)
 }
 
 static void
-idle_triggered_idle_cb (GnomeIdleMonitor *monitor,
-                        guint             watch_id,
-                        gpointer          user_data)
+idle_triggered_idle_cb (GsdIdleMonitor *monitor,
+                        guint           watch_id,
+                        gpointer        user_data)
 {
         GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
         const char *id_name;
@@ -3131,9 +2978,9 @@ idle_triggered_idle_cb (GnomeIdleMonitor *monitor,
 }
 
 static void
-idle_became_active_cb (GnomeIdleMonitor *monitor,
-                       guint             watch_id,
-                       gpointer          user_data)
+idle_became_active_cb (GsdIdleMonitor *monitor,
+                       guint           watch_id,
+                       gpointer        user_data)
 {
         GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
 
@@ -3339,7 +3186,7 @@ uninhibit_suspend (GsdPowerManager *manager)
 }
 
 static void
-on_randr_event (GnomeRRScreen *screen, gpointer user_data)
+on_randr_event (GsdRRScreen *screen, gpointer user_data)
 {
         GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
 
@@ -3424,7 +3271,7 @@ gsd_power_manager_start (GsdPowerManager *manager,
         gnome_settings_profile_start (NULL);
 
         /* coldplug the list of screens */
-        manager->priv->rr_screen = gnome_rr_screen_new (gdk_screen_get_default (), error);
+        manager->priv->rr_screen = gsd_rr_screen_new (gdk_screen_get_default (), error);
         if (manager->priv->rr_screen == NULL) {
                 g_debug ("Couldn't detect any screens, disabling plugin");
                 return FALSE;
@@ -3479,10 +3326,8 @@ gsd_power_manager_start (GsdPowerManager *manager,
                           G_CALLBACK (engine_device_added_cb), manager);
         g_signal_connect (manager->priv->up_client, "device-removed",
                           G_CALLBACK (engine_device_removed_cb), manager);
-        g_signal_connect (manager->priv->up_client, "device-changed",
-                          G_CALLBACK (engine_device_changed_cb), manager);
-        g_signal_connect_after (manager->priv->up_client, "changed",
-                                G_CALLBACK (up_client_changed_cb), manager);
+        g_signal_connect_after (manager->priv->up_client, "notify::lid-is-closed",
+                          G_CALLBACK (lid_state_changed_cb), manager);
         g_signal_connect (manager->priv->up_client, "notify::on-battery",
                           G_CALLBACK (up_client_on_battery_cb), manager);
 
@@ -3550,7 +3395,7 @@ gsd_power_manager_start (GsdPowerManager *manager,
                                                                   "use-time-for-policy");
 
         /* create IDLETIME watcher */
-        manager->priv->idle_monitor = gnome_idle_monitor_new ();
+        manager->priv->idle_monitor = g_object_ref (gsd_idle_monitor_get_core ());
 
         /* set up the screens */
         g_signal_connect (manager->priv->rr_screen, "changed", G_CALLBACK (on_randr_event), manager);
