@@ -522,11 +522,11 @@ unity_session_signal_callback (GDBusProxy *proxy,
         if (g_strcmp0 (signal_name, "Locked") == 0) {
                 manager->priv->lockscreen_active = TRUE;
                 check_volume_queue (manager);
-                g_debug ("Lockscreen activated");
+                g_debug ("Unity.Session Locked");
         } else if (g_strcmp0 (signal_name, "Unlocked") == 0) {
                 manager->priv->lockscreen_active = FALSE;
                 check_volume_queue (manager);
-                g_debug ("Lockscreen terminated");
+                g_debug ("Unity.Session Unlocked");
         }
 }
 
