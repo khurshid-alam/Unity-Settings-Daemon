@@ -70,6 +70,7 @@
 #define GSD_KEYBOARD_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GSD_TYPE_KEYBOARD_MANAGER, GsdKeyboardManagerPrivate))
 
 #define GSD_KEYBOARD_DIR "org.gnome.settings-daemon.peripherals.keyboard"
+#define GSETTINGS_KEYBOARD_SCHEMA     "org.gnome.desktop.peripherals.keyboard"
 
 #define KEY_REPEAT         "repeat"
 #define KEY_CLICK          "click"
@@ -114,6 +115,7 @@ struct GsdKeyboardManagerPrivate
 {
 	guint      start_idle_id;
         GSettings *settings;
+        GSettings *gsettings;
         GSettings *input_sources_settings;
         GSettings *interface_settings;
         GnomeXkbInfo *xkb_info;
@@ -1784,7 +1786,7 @@ apply_repeat (GsdKeyboardManager *manager)
         guint            delay;
 
         g_debug ("Applying the repeat settings");
-        settings      = manager->priv->settings;
+        settings      = manager->priv->gsettings;
         repeat        = g_settings_get_boolean  (settings, KEY_REPEAT);
         interval      = g_settings_get_uint  (settings, KEY_INTERVAL);
         delay         = g_settings_get_uint  (settings, KEY_DELAY);
@@ -1833,7 +1835,18 @@ settings_changed (GSettings          *settings,
 		apply_numlock (manager);
 	} else if (g_strcmp0 (key, KEY_NUMLOCK_STATE) == 0) {
 		g_debug ("Num-Lock state '%s' changed, will apply at next startup", key);
-	} else if (g_strcmp0 (key, KEY_REPEAT) == 0 ||
+	} else {
+		g_warning ("Unhandled settings change, key '%s'", key);
+	}
+
+}
+
+static void
+gsettings_changed (GSettings          *settings,
+                  const char         *key,
+                  GsdKeyboardManager *manager)
+{
+        if (g_strcmp0 (key, KEY_REPEAT) == 0 ||
 		 g_strcmp0 (key, KEY_INTERVAL) == 0 ||
 		 g_strcmp0 (key, KEY_DELAY) == 0) {
 		g_debug ("Key repeat setting '%s' changed, applying key repeat settings", key);
@@ -2391,6 +2404,7 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
 #endif
 
         manager->priv->settings = g_settings_new (GSD_KEYBOARD_DIR);
+        manager->priv->gsettings = g_settings_new (GSETTINGS_KEYBOARD_SCHEMA);
 
 	xkb_init (manager);
 
@@ -2450,6 +2464,9 @@ start_keyboard_idle_cb (GsdKeyboardManager *manager)
 
         g_signal_connect (G_OBJECT (manager->priv->settings), "changed",
                           G_CALLBACK (settings_changed), manager);
+        g_signal_connect (G_OBJECT (manager->priv->gsettings), "changed",
+                          G_CALLBACK (gsettings_changed), manager);
+
         g_signal_connect (G_OBJECT (manager->priv->input_sources_settings), "change-event",
                           G_CALLBACK (apply_input_sources_settings), manager);
 
