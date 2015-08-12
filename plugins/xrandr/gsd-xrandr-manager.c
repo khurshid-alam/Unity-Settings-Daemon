@@ -129,6 +129,13 @@ struct GsdXrandrManagerPrivate {
         gchar *main_touchscreen_name;
 };
 
+typedef struct {
+        int mapping_pid;
+        guint mapping_kill_id;
+        guint mapping_retry_id;
+        gboolean mapping_killed;
+} TouchMappingPrivate;
+
 static const GsdRRRotation possible_rotations[] = {
         GSD_RR_ROTATION_0,
         GSD_RR_ROTATION_90,
@@ -157,18 +164,14 @@ static gpointer manager_object = NULL;
 
 static FILE *log_file;
 
-static gboolean mapping_successful = FALSE;
-static gboolean mapping_retried = FALSE;
-static gboolean mapping_killed = FALSE;
 /* Wait before retrying */
-static int retry_timeout = 5;
+static const int RETRY_TIMEOUT = 5;
 /* Wait before timing out */
-static int mapping_timeout = 3;
-static int mapping_pid = -1;
+static const int MAPPING_TIMEOUT = 3;
 
 static GsdRROutput * input_info_find_size_match (GsdXrandrManager *manager, GsdRRScreen *rr_screen);
-static int map_touch_to_output (GsdXrandrManager *manager, int device_id, GsdRROutputInfo *output);
-static void do_touchscreen_mapping (GsdXrandrManager *manager);
+static int map_touch_to_output (GsdXrandrManager *manager, GsdRROutputInfo *output);
+static gboolean do_touchscreen_mapping (GsdXrandrManager *manager);
 
 static void
 log_open (void)
@@ -1832,13 +1835,6 @@ on_randr_event (GsdRRScreen *screen, gpointer data)
         }
 
         if (priv->main_touchscreen_id != -1) {
-                /* Reset any previous mapping status and retries */
-                log_msg ("\nResetting touchscreen mapping status on RandR event\n");
-                mapping_successful = FALSE;
-                mapping_killed = FALSE;
-                mapping_retried = FALSE;
-                mapping_pid = -1;
-
                 /* Set mapping of input devices onto displays */
                 log_msg ("\nSetting touchscreen mapping on RandR event\n");
                 do_touchscreen_mapping (manager);
@@ -2200,47 +2196,35 @@ static gboolean
 cb_mapping_child_kill (gpointer data)
 {
         int kill_status;
-        GsdXrandrManager *manager = (GsdXrandrManager*)data;
-        GsdXrandrManagerPrivate *priv = manager->priv;
 
-        g_debug ("Kill mapping device id %d\n", priv->main_touchscreen_id);
+        gchar *message = NULL;
+        TouchMappingPrivate *mapping_data = (TouchMappingPrivate*) data;
 
-        /* We want to kill the process only if:
-           - It hasn't ended yet (i.e. mapping_successful == FALSE)
-           OR
-           - It was killed and it was our first try.
-        */
-        if (!mapping_successful || (mapping_killed && !mapping_retried)) {
-                g_debug ("Killing process %d after %d second(s) timeout...\n", mapping_pid, mapping_timeout);
+        message = g_strdup_printf ("Killing touchscreen mapping process %d after %d second(s) timeout...",
+                                    mapping_data->mapping_pid, MAPPING_TIMEOUT);
 
-                kill_status = kill (mapping_pid, SIGTERM);
-
-                g_debug ("Kill status %d...\n", kill_status);
-
-                if (kill_status != 0) {
-                        g_error ("Failed to kill mapping process: %s\n", strerror(errno));
-                }
-                else {
-                        mapping_killed = TRUE;
-                        /* If this is our first try, let's retry mapping */
-                        if (!mapping_retried) {
-                                mapping_successful = FALSE;
-
-                                g_debug ("Retrying in %d second(s)\n", retry_timeout);
-                                g_timeout_add_seconds (retry_timeout, (GSourceFunc)do_touchscreen_mapping, manager);
-                        }
-                        else {
-                                g_debug ("No more retrying\n");
-                        }
-                }
-        }
-        else {
-                g_debug ("Mapping succeeded. No need to terminate it\n");
+        if (!message) {
+                g_error ("Failed to allocate memory to log the killing of the mapping process");
+                goto out;
         }
 
-        mapping_retried = TRUE;
+        g_debug ("%s", message);
+        g_warning ("%s", message);
 
-        return FALSE;
+        g_free (message);
+
+        kill_status = kill (mapping_data->mapping_pid, SIGTERM);
+
+        /* Mark as killed */
+        mapping_data->mapping_killed = TRUE;
+
+        g_debug ("Kill status %d...", kill_status);
+
+        if (kill_status != 0)
+                g_error ("Failed to kill mapping process: %s", strerror (errno));
+
+out:
+        return G_SOURCE_REMOVE;
 }
 
 /* Clean up spawned processes when they are done */
@@ -2249,27 +2233,40 @@ cb_mapping_child_watch (GPid  pid,
                         gint  status,
                         gpointer data)
 {
-        mapping_successful = TRUE;
-        g_debug ("Cleaning up spawned mapping\n");
+        TouchMappingPrivate *mapping_data = (TouchMappingPrivate*) data;
+
+        g_debug ("Cleaning up spawned mapping");
 
         /* Close pid */
         g_spawn_close_pid (pid);
+
+        /* No need to kill a process that ended */
+        if (mapping_data->mapping_kill_id > 0) {
+                g_debug ("Cancelling killing of process that ended");
+                g_source_remove (mapping_data->mapping_kill_id);
+        }
+
+        /* No need to retry if it succeeded */
+        if (!mapping_data->mapping_killed) {
+                g_debug ("Cancelling retry id %d", mapping_data->mapping_retry_id);
+                g_source_remove (mapping_data->mapping_retry_id);
+        }
+
+        /* Free mapping data */
+        g_slice_free(TouchMappingPrivate, mapping_data);
+        mapping_data = NULL;
 }
 
 static int
-map_touch_to_output (GsdXrandrManager *manager,
-                     int device_id,
-                     GsdRROutputInfo *output)
+map_touch_to_output (GsdXrandrManager *manager, GsdRROutputInfo *output)
 {
-        char command_str[100];
-        GPid  pid;
+        TouchMappingPrivate *mapping_data = NULL;
+        gchar *command_str = NULL;
         GError **error = NULL;
         gboolean success = FALSE;
-        /* In case mapping needs to run again */
-        mapping_successful = FALSE;
-        mapping_killed = FALSE;
         gchar **command = NULL;
 
+        GsdXrandrManagerPrivate *priv = manager->priv;
         gchar *name = gsd_rr_output_info_get_name (output);
 
         if (!name) {
@@ -2279,13 +2276,28 @@ map_touch_to_output (GsdXrandrManager *manager,
 
         if (gsd_rr_output_info_is_active (output)) {
                 g_debug ("Mapping touchscreen %d onto output %s",
-                         device_id, name);
+                         priv->main_touchscreen_id, name);
 
-                snprintf (command_str, sizeof (command_str),
-                          "/usr/bin/xinput --map-to-output %d %s", device_id, name);
+                command_str = g_strdup_printf ("/usr/bin/xinput --map-to-output %d %s",
+                                               priv->main_touchscreen_id, name);
+
+                if (!command_str)
+                        goto out;
 
                 if (!g_shell_parse_argv (command_str, NULL, &command, NULL))
                         goto out;
+
+                /* Each spawned process gets its own mapping data */
+                mapping_data = g_slice_new(TouchMappingPrivate);
+                if (!mapping_data) {
+                        g_error ("Touchscreen mapping resource allocation failed");
+                        goto out;
+                }
+                /* Initialise mapping data */
+                mapping_data->mapping_pid = -1;
+                mapping_data->mapping_kill_id = 0;
+                mapping_data->mapping_retry_id = 0;
+                mapping_data->mapping_killed = FALSE;
 
                 success = g_spawn_async (NULL,
                                          command,
@@ -2293,41 +2305,50 @@ map_touch_to_output (GsdXrandrManager *manager,
                                          G_SPAWN_DO_NOT_REAP_CHILD,
                                          NULL,
                                          NULL,
-                                         &pid,
+                                         &(mapping_data->mapping_pid),
                                          error);
-
-                g_strfreev(command);
+                g_strfreev (command);
 
                 if (success) {
-                        g_debug ("Touchscreen mapping spawn succeeded\n");
-                        mapping_pid = pid;
+                        g_debug ("Touchscreen mapping spawn succeeded");
 
                         /* Clean up after child is done */
-                        g_child_watch_add (pid, (GChildWatchFunc)cb_mapping_child_watch, manager);
+                        g_child_watch_add (mapping_data->mapping_pid, (GChildWatchFunc) cb_mapping_child_watch,
+                                           mapping_data);
                         /* Kill the child after n seconds */
-                        g_timeout_add_seconds (mapping_timeout, (GSourceFunc)cb_mapping_child_kill, manager);
+                        mapping_data->mapping_kill_id = g_timeout_add_seconds (MAPPING_TIMEOUT,
+                                                                               (GSourceFunc) cb_mapping_child_kill,
+                                                                               mapping_data);
+                        /* Set potential retry */
+                        g_debug ("Retrying in %d second(s)", RETRY_TIMEOUT+MAPPING_TIMEOUT);
+                        mapping_data->mapping_retry_id = g_timeout_add_seconds (RETRY_TIMEOUT+MAPPING_TIMEOUT,
+                                                                                (GSourceFunc) do_touchscreen_mapping,
+                                                                                manager);
+                        g_debug ("Retry id: %d", mapping_data->mapping_retry_id);
                 }
                 else {
-                        g_error ("Touchscreen mapping failed\n");
+                        g_error ("Touchscreen mapping failed");
                         if (error != NULL)
-                                g_error ("%s\n", (*error)->message);
-
+                                g_error ("%s", (*error)->message);
                         g_clear_error (error);
 
-                        mapping_pid = -1;
+                        /* Free mapping data */
+                        g_slice_free(TouchMappingPrivate, mapping_data);
+                        mapping_data = NULL;
                 }
-
         }
         else {
                 g_debug ("No need to map %d onto output %s. The output is off",
-                         device_id, name);
+                         priv->main_touchscreen_id, name);
         }
 
 out:
+        g_free (command_str);
+
         return success;
 }
 
-static void
+static gboolean
 do_touchscreen_mapping (GsdXrandrManager *manager)
 {
         GsdXrandrManagerPrivate *priv = manager->priv;
@@ -2349,9 +2370,7 @@ do_touchscreen_mapping (GsdXrandrManager *manager)
         if (priv->main_touchscreen_id != -1) {
                 /* Set initial mapping */
                 g_debug ("Setting initial touchscreen mapping");
-                map_touch_to_output (manager,
-                                     priv->main_touchscreen_id,
-                                     laptop_output);
+                map_touch_to_output (manager, laptop_output);
         }
         else {
                 g_debug ("No main touchscreen detected");
@@ -2359,6 +2378,8 @@ do_touchscreen_mapping (GsdXrandrManager *manager)
 
 out:
         g_object_unref (current);
+
+        return G_SOURCE_REMOVE;
 }
 
 gboolean
