@@ -2208,7 +2208,6 @@ cb_mapping_child_kill (gpointer data)
                 goto out;
         }
 
-        g_debug ("%s", message);
         g_warning ("%s", message);
 
         g_free (message);
@@ -2253,7 +2252,7 @@ cb_mapping_child_watch (GPid  pid,
         }
 
         /* Free mapping data */
-        g_slice_free(TouchMappingPrivate, mapping_data);
+        g_slice_free (TouchMappingPrivate, mapping_data);
         mapping_data = NULL;
 }
 
@@ -2288,7 +2287,7 @@ map_touch_to_output (GsdXrandrManager *manager, GsdRROutputInfo *output)
                         goto out;
 
                 /* Each spawned process gets its own mapping data */
-                mapping_data = g_slice_new(TouchMappingPrivate);
+                mapping_data = g_slice_new (TouchMappingPrivate);
                 if (!mapping_data) {
                         g_error ("Touchscreen mapping resource allocation failed");
                         goto out;
