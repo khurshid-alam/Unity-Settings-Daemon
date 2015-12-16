@@ -84,6 +84,7 @@
 #define KEY_BELL_PITCH     "bell-pitch"
 #define KEY_BELL_DURATION  "bell-duration"
 #define KEY_BELL_MODE      "bell-mode"
+#define KEY_BELL_CUSTOM_FILE "bell-custom-file"
 
 #define GNOME_DESKTOP_INTERFACE_DIR "org.gnome.desktop.interface"
 
@@ -1858,6 +1859,8 @@ gsettings_changed (GSettings          *settings,
 		 g_strcmp0 (key, KEY_DELAY) == 0) {
 		g_debug ("Key repeat setting '%s' changed, applying key repeat settings", key);
 		apply_repeat (manager);
+	} else if (g_strcmp0 (key, KEY_BELL_CUSTOM_FILE) == 0){
+		g_debug ("Ignoring '%s' setting change", KEY_BELL_CUSTOM_FILE);
 	} else {
 		g_warning ("Unhandled settings change, key '%s'", key);
 	}
