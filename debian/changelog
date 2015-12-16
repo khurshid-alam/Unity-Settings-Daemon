@@ -1,3 +1,12 @@
+unity-settings-daemon (15.04.1+16.04.20151214-0ubuntu2) UNRELEASED; urgency=medium
+
+  * plugins/keyboard/gsd-keyboard-manager.c:
+    - Fix shortcuts for non-latin keyboard layouts in certain programs,
+      but only when the user's layout switching shortcuts are not
+      Shift_L, Shift_R, <Shift>Shift_L, or <Shift>Shift_R (LP: #1226962)
+
+ -- William Hua <william.hua@canonical.com>  Wed, 16 Dec 2015 18:34:53 -0500
+
 unity-settings-daemon (15.04.1+16.04.20151214-0ubuntu1) xenial; urgency=medium
 
   [ David Henningsson ]
