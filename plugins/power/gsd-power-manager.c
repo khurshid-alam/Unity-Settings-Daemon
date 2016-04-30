@@ -2842,6 +2842,20 @@ screensaver_vanished_cb (GDBusConnection *connection,
 }
 
 static void
+upower_kbd_signal_cb (GDBusProxy *proxy,
+                      const gchar *sender_name,
+                      const gchar *signal_name,
+                      GVariant *parameters,
+                      gpointer user_data)
+{
+        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+
+        if (g_strcmp0 (signal_name, "BrightnessChanged") == 0) {
+                g_variant_get (parameters, "(i)", &manager->priv->kbd_brightness_now);
+        }
+}
+
+static void
 power_keyboard_proxy_ready_cb (GObject             *source_object,
                                GAsyncResult        *res,
                                gpointer             user_data)
@@ -2858,6 +2872,9 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                 g_error_free (error);
                 goto out;
         }
+
+        g_signal_connect (manager->priv->upower_kdb_proxy, "g-signal",
+                          G_CALLBACK (upower_kbd_signal_cb), manager);
 
         k_now = g_dbus_proxy_call_sync (manager->priv->upower_kdb_proxy,
                                         "GetBrightness",
@@ -2894,7 +2911,7 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
 
         /* set brightness to max if not currently set so is something
          * sensible */
-        if (manager->priv->kbd_brightness_now <= 0) {
+        if (manager->priv->kbd_brightness_now < 0) {
                 gboolean ret;
                 ret = upower_kbd_set_brightness (manager,
                                                  manager->priv->kbd_brightness_max,
