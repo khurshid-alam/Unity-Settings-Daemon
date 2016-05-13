@@ -3568,6 +3568,7 @@ handle_method_call_keyboard (GsdPowerManager *manager,
 
         } else if (g_strcmp0 (method_name, "Toggle") == 0) {
                 ret = upower_kbd_toggle (manager, &error);
+                value = manager->priv->kbd_brightness_now;
         } else {
                 g_assert_not_reached ();
         }
