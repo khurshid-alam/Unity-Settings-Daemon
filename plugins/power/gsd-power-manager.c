@@ -240,6 +240,7 @@ static gboolean  idle_is_session_inhibited (GsdPowerManager *manager, guint mask
 static void      idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode);
 static void      idle_triggered_idle_cb (GsdIdleMonitor *monitor, guint watch_id, gpointer user_data);
 static void      idle_became_active_cb (GsdIdleMonitor *monitor, guint watch_id, gpointer user_data);
+static gboolean  upower_kbd_update_brightness (GsdPowerManager *manager);
 
 G_DEFINE_TYPE (GsdPowerManager, gsd_power_manager, G_TYPE_OBJECT)
 
@@ -1930,6 +1931,7 @@ upower_kbd_set_brightness (GsdPowerManager *manager, guint value, GError **error
         GVariant *retval;
 
         /* same as before */
+        upower_kbd_update_brightness (manager);
         if (manager->priv->kbd_brightness_now == value)
                 return TRUE;
 
@@ -1967,7 +1969,11 @@ upower_kbd_toggle (GsdPowerManager *manager,
                 }
         } else {
                 g_debug ("keyboard toggle on");
-                /* save the current value to restore later when untoggling */
+                /* save the current value to restore later when untoggling,
+                 * we force a new reading from UPower since BrightnessChanged
+                 * signal might have not been updated, while it could have been
+                 * changed using hardware keys or direct upower calls */
+                upower_kbd_update_brightness (manager);
                 manager->priv->kbd_brightness_old = manager->priv->kbd_brightness_now;
                 ret = upower_kbd_set_brightness (manager, 0, error);
                 if (!ret) {
@@ -2051,7 +2057,7 @@ setup_lid_closed_action (GsdPowerManager *manager)
         }
 
         if (policy == GSD_POWER_ACTION_NOTHING) {
-		inhibit_lid_switch (manager);
+                inhibit_lid_switch (manager);
                 manager->priv->inhibit_lid_switch_action = TRUE;
         } else {
                 uninhibit_lid_switch (manager);
@@ -2269,6 +2275,7 @@ kbd_backlight_dim (GsdPowerManager *manager,
         if (manager->priv->upower_kdb_proxy == NULL)
                 return TRUE;
 
+        upower_kbd_update_brightness (manager);
         now = manager->priv->kbd_brightness_now;
         max = manager->priv->kbd_brightness_max;
         idle = PERCENTAGE_TO_ABS (0, max, idle_percentage);
@@ -2759,22 +2766,25 @@ screensaver_signal_cb (GDBusProxy *proxy,
 }
 
 static void
-power_keyboard_proxy_ready_cb (GObject             *source_object,
-                               GAsyncResult        *res,
-                               gpointer             user_data)
+upower_kbd_signal_cb (GDBusProxy *proxy,
+                      const gchar *sender_name,
+                      const gchar *signal_name,
+                      GVariant *parameters,
+                      gpointer user_data)
 {
-        GVariant *k_now = NULL;
-        GVariant *k_max = NULL;
-        GError *error = NULL;
         GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
 
-        manager->priv->upower_kdb_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
-        if (manager->priv->upower_kdb_proxy == NULL) {
-                g_warning ("Could not connect to UPower: %s",
-                           error->message);
-                g_error_free (error);
-                goto out;
+        if (g_strcmp0 (signal_name, "BrightnessChanged") == 0) {
+                g_variant_get (parameters, "(i)", &manager->priv->kbd_brightness_now);
         }
+}
+
+static gboolean
+upower_kbd_update_brightness (GsdPowerManager *manager)
+{
+        GVariant *k_now = NULL;
+        GError *error = NULL;
+        gint now;
 
         k_now = g_dbus_proxy_call_sync (manager->priv->upower_kdb_proxy,
                                         "GetBrightness",
@@ -2790,8 +2800,40 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                                    error->message);
                 }
                 g_error_free (error);
+                return FALSE;
+        }
+
+        g_variant_get (k_now, "(i)", &now);
+        g_variant_unref (k_now);
+
+        if (now >= 0)
+                manager->priv->kbd_brightness_now = now;
+
+        return TRUE;
+}
+
+static void
+power_keyboard_proxy_ready_cb (GObject             *source_object,
+                               GAsyncResult        *res,
+                               gpointer             user_data)
+{
+        GVariant *k_max = NULL;
+        GError *error = NULL;
+        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+
+        manager->priv->upower_kdb_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
+        if (manager->priv->upower_kdb_proxy == NULL) {
+                g_warning ("Could not connect to UPower: %s",
+                           error->message);
+                g_error_free (error);
                 goto out;
         }
+
+        g_signal_connect (manager->priv->upower_kdb_proxy, "g-signal",
+                          G_CALLBACK (upower_kbd_signal_cb), manager);
+
+        if (!upower_kbd_update_brightness (manager))
+                goto out;
 
         k_max = g_dbus_proxy_call_sync (manager->priv->upower_kdb_proxy,
                                         "GetMaxBrightness",
@@ -2806,12 +2848,11 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                 goto out;
         }
 
-        g_variant_get (k_now, "(i)", &manager->priv->kbd_brightness_now);
         g_variant_get (k_max, "(i)", &manager->priv->kbd_brightness_max);
 
         /* set brightness to max if not currently set so is something
          * sensible */
-        if (manager->priv->kbd_brightness_now <= 0) {
+        if (manager->priv->kbd_brightness_now < 0) {
                 gboolean ret;
                 ret = upower_kbd_set_brightness (manager,
                                                  manager->priv->kbd_brightness_max,
@@ -2824,8 +2865,6 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                 }
         }
 out:
-        if (k_now != NULL)
-                g_variant_unref (k_now);
         if (k_max != NULL)
                 g_variant_unref (k_max);
 }
@@ -3440,6 +3479,7 @@ handle_method_call_keyboard (GsdPowerManager *manager,
 
         if (g_strcmp0 (method_name, "StepUp") == 0) {
                 g_debug ("keyboard step up");
+                upower_kbd_update_brightness (manager);
                 step = BRIGHTNESS_STEP_AMOUNT (manager->priv->kbd_brightness_max);
                 value = MIN (manager->priv->kbd_brightness_now + step,
                              manager->priv->kbd_brightness_max);
@@ -3447,12 +3487,14 @@ handle_method_call_keyboard (GsdPowerManager *manager,
 
         } else if (g_strcmp0 (method_name, "StepDown") == 0) {
                 g_debug ("keyboard step down");
+                upower_kbd_update_brightness (manager);
                 step = BRIGHTNESS_STEP_AMOUNT (manager->priv->kbd_brightness_max);
                 value = MAX (manager->priv->kbd_brightness_now - step, 0);
                 ret = upower_kbd_set_brightness (manager, value, &error);
 
         } else if (g_strcmp0 (method_name, "Toggle") == 0) {
                 ret = upower_kbd_toggle (manager, &error);
+                value = manager->priv->kbd_brightness_now;
         } else {
                 g_assert_not_reached ();
         }
