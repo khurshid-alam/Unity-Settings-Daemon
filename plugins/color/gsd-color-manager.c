@@ -46,7 +46,7 @@
 
 struct GsdColorManagerPrivate
 {
-        GDBusProxy      *session;
+        GsdSessionManager *session;
         CdClient        *client;
         GSettings       *settings;
         GcmProfileStore *profile_store;
