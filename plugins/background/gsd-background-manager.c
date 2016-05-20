@@ -42,7 +42,6 @@
 #include <libgnome-desktop/gnome-bg.h>
 #include <X11/Xatom.h>
 
-#include "gnome-settings-session.h"
 #include "gnome-settings-profile.h"
 #include "gsd-background-manager.h"
 

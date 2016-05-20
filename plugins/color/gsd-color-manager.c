@@ -31,7 +31,7 @@
 
 #include "gnome-settings-plugin.h"
 #include "gnome-settings-profile.h"
-#include "gnome-settings-session.h"
+#include "gnome-settings-bus.h"
 #include "gsd-color-manager.h"
 #include "gcm-profile-store.h"
 #include "gcm-dmi.h"

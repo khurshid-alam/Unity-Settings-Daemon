@@ -28,7 +28,6 @@
 #include <gio/gio.h>
 
 #include "gnome-settings-plugin.h"
-#include "gnome-settings-session.h"
 #include "gsd-smartcard-plugin.h"
 #include "gsd-smartcard-manager.h"
 

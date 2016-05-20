@@ -29,7 +29,6 @@
 #include <gio/gio.h>
 
 #include "gnome-settings-profile.h"
-#include "gnome-settings-session.h"
 #include "gsd-automount-manager.h"
 #include "gsd-autorun.h"
 

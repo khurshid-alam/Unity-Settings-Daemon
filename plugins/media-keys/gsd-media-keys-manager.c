@@ -48,7 +48,7 @@
 #endif
 
 #include "gnome-settings-plugin.h"
-#include "gnome-settings-session.h"
+#include "gnome-settings-bus.h"
 #include "gnome-settings-profile.h"
 #include "gsd-marshal.h"
 #include "gsd-media-keys-manager.h"
@@ -1160,7 +1160,7 @@ gnome_session_shutdown (GsdMediaKeysManager *manager)
 	GVariant *variant;
         GDBusProxy *proxy;
 
-        proxy = G_DBUS_PROXY (gnome_settings_session_get_session_proxy ());
+        proxy = G_DBUS_PROXY (gnome_settings_bus_get_session_proxy ());
 	variant = g_dbus_proxy_call_sync (proxy,
 					  "Shutdown",
 					  NULL,
