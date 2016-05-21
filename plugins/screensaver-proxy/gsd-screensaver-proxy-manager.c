@@ -31,6 +31,7 @@
 #include "gnome-settings-bus.h"
 #include "gnome-settings-profile.h"
 #include "gsd-screensaver-proxy-manager.h"
+#include "gsd-idle-monitor.h"
 
 #define GSD_SCREENSAVER_PROXY_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GSD_TYPE_SCREENSAVER_PROXY_MANAGER, GsdScreensaverProxyManagerPrivate))
 
@@ -261,7 +262,9 @@ handle_method_call (GDBusConnection       *connection,
                         ret = g_variant_new ("(b)", TRUE);
                 }
         } else if (g_strcmp0 (method_name, "GetSessionIdleTime") == 0) {
-                goto unimplemented;
+                GsdIdleMonitor *idle_monitor = gsd_idle_monitor_get_core ();
+                gint64 idle_time_ms = gsd_idle_monitor_get_idletime (idle_monitor);
+                ret = g_variant_new ("(u)", idle_time_ms / 1000);
         } else {
                 goto unimplemented;
         }
