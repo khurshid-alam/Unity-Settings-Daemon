@@ -28,6 +28,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <gio/gio.h>
+
 #include "gnome-settings-bus.h"
 #include "gnome-settings-profile.h"
 #include "gsd-screensaver-proxy-manager.h"
@@ -258,8 +260,14 @@ handle_method_call (GDBusConnection       *connection,
                                               -1, NULL, &error);
 
                 if (error == NULL && g_strcmp0 (method_name, "SetActive") == 0) {
+                        gboolean active;
+                        g_variant_get (parameters, "(b)", &active);
                         g_variant_unref (ret);
-                        ret = g_variant_new ("(b)", TRUE);
+
+                        /* Returning the actual Activate state here is not possible,
+                         * as calling GetActive at this point might return an invalid
+                         * value if the activation process is still ongoing. */
+                        ret = g_variant_new ("(b)", active);
                 }
         } else if (g_strcmp0 (method_name, "GetSessionIdleTime") == 0) {
                 GsdIdleMonitor *idle_monitor = gsd_idle_monitor_get_core ();
