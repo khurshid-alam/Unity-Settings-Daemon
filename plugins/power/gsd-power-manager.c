@@ -3489,10 +3489,12 @@ gsd_power_manager_stop (GsdPowerManager *manager)
         }
 
         devices = manager->priv->devices_array;
-        for (i = 0; i < devices->len; i++)
-                g_signal_handlers_disconnect_by_data (g_ptr_array_index (devices, i), manager);
-        g_ptr_array_unref (devices);
-        manager->priv->devices_array = NULL;
+        if (devices != NULL) {
+                for (i = 0; i < devices->len; i++)
+                        g_signal_handlers_disconnect_by_data (g_ptr_array_index (devices, i), manager);
+                g_ptr_array_unref (devices);
+                manager->priv->devices_array = NULL;
+        }
 
         g_clear_object (&manager->priv->device_composite);
         g_clear_object (&manager->priv->previous_icon);
