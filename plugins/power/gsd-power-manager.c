@@ -1956,11 +1956,12 @@ upower_kbd_set_brightness (GsdPowerManager *manager, guint value, GError **error
         return TRUE;
 }
 
-static gboolean
+static int
 upower_kbd_toggle (GsdPowerManager *manager,
                    GError **error)
 {
         gboolean ret;
+        int value = -1;
 
         if (manager->priv->kbd_brightness_old >= 0) {
                 g_debug ("keyboard toggle off");
@@ -1970,6 +1971,7 @@ upower_kbd_toggle (GsdPowerManager *manager,
                 if (ret) {
                         /* succeeded, set to -1 since now no old value */
                         manager->priv->kbd_brightness_old = -1;
+                        value = 0;
                 }
         } else {
                 g_debug ("keyboard toggle on");
@@ -1979,10 +1981,14 @@ upower_kbd_toggle (GsdPowerManager *manager,
                 if (!ret) {
                         /* failed, reset back to -1 */
                         manager->priv->kbd_brightness_old = -1;
+                } else {
+                        value = 0;
                 }
         }
 
-        return ret;
+        if (ret)
+                return value;
+        return -1;
 }
 
 static gboolean
@@ -2842,6 +2848,20 @@ screensaver_vanished_cb (GDBusConnection *connection,
 }
 
 static void
+upower_kbd_signal_cb (GDBusProxy *proxy,
+                      const gchar *sender_name,
+                      const gchar *signal_name,
+                      GVariant *parameters,
+                      gpointer user_data)
+{
+        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+
+        if (g_strcmp0 (signal_name, "BrightnessChanged") == 0) {
+                g_variant_get (parameters, "(i)", &manager->priv->kbd_brightness_now);
+        }
+}
+
+static void
 power_keyboard_proxy_ready_cb (GObject             *source_object,
                                GAsyncResult        *res,
                                gpointer             user_data)
@@ -2858,6 +2878,9 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                 g_error_free (error);
                 goto out;
         }
+
+        g_signal_connect (manager->priv->upower_kdb_proxy, "g-signal",
+                          G_CALLBACK (upower_kbd_signal_cb), manager);
 
         k_now = g_dbus_proxy_call_sync (manager->priv->upower_kdb_proxy,
                                         "GetBrightness",
@@ -3550,7 +3573,9 @@ handle_method_call_keyboard (GsdPowerManager *manager,
                 ret = upower_kbd_set_brightness (manager, value, &error);
 
         } else if (g_strcmp0 (method_name, "Toggle") == 0) {
-                ret = upower_kbd_toggle (manager, &error);
+                value = upower_kbd_toggle (manager, &error);
+                ret = (value >= 0);
+
         } else {
                 g_assert_not_reached ();
         }
