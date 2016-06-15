@@ -905,8 +905,6 @@ engine_coldplug (GsdPowerManager *manager)
         guint i;
         GPtrArray *array = NULL;
         UpDevice *device;
-        gboolean ret;
-        GError *error = NULL;
 
         engine_recalculate_state (manager);
 
