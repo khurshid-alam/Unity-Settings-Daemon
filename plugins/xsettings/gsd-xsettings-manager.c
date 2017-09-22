@@ -262,6 +262,7 @@ struct GnomeXSettingsManagerPrivate
         gboolean           have_unity;
 
         guint              notify_idle_id;
+        guint              freeze_settings_migrate_id;
 };
 
 #define GSD_XSETTINGS_ERROR gsd_xsettings_error_quark ()
@@ -958,6 +959,21 @@ xsettings_callback (GSettings             *settings,
                 if (g_str_equal (schema_id, SCALING_SETTINGS_SCHEMA_FOR_DESKTOP)) {
                         update_xft_settings (manager);
                         queue_notify (manager);
+                } else if (manager->priv->freeze_settings_migrate_id == 0 &&
+                           in_desktop ("Unity") &&
+                           g_str_equal (schema_id, INTERFACE_SETTINGS_SCHEMA)) {
+                        /* Enable this only after a timeout... */
+                        GSettings *unity_interface_settings;
+                        GVariant *setting_value;
+
+                        setting_value = g_settings_get_value (settings, key);
+                        unity_interface_settings =
+                                g_hash_table_lookup (manager->priv->settings,
+                                                     UNITY_INTERFACE_SETTINGS_SCHEMA);
+
+                        g_settings_set_value (unity_interface_settings, key,
+                                              setting_value);
+                        g_variant_unref (setting_value);
                 }
 
                 g_free (schema_id);
@@ -1072,6 +1088,14 @@ start_unity_monitor (GnomeXSettingsManager *manager)
                                                                NULL);
 }
 
+static gboolean
+on_freeze_settings_migrate_timeout (gpointer data)
+{
+        GnomeXSettingsManager *manager = data;
+        manager->priv->freeze_settings_migrate_id = FALSE;
+        return FALSE;
+}
+
 gboolean
 gnome_xsettings_manager_start (GnomeXSettingsManager *manager,
                                GError               **error)
@@ -1158,6 +1182,9 @@ gnome_xsettings_manager_start (GnomeXSettingsManager *manager,
         queue_notify (manager);
         g_variant_unref (overrides);
 
+        /* Ingore migration of gnome settings to unity at startup */
+        manager->priv->freeze_settings_migrate_id =
+                g_timeout_add_seconds (5, on_freeze_settings_migrate_timeout, manager);
 
         gnome_settings_profile_end (NULL);
 
@@ -1191,8 +1218,11 @@ gnome_xsettings_manager_stop (GnomeXSettingsManager *manager)
 
         stop_fontconfig_monitor (manager);
 
-        if (manager->priv->unity_name_watch_id > 0)
-                g_bus_unwatch_name (manager->priv->unity_name_watch_id);
+        if (p->unity_name_watch_id > 0)
+                g_bus_unwatch_name (p->unity_name_watch_id);
+
+        if (p->freeze_settings_migrate_id != 0)
+                g_source_remove (p->freeze_settings_migrate_id);
 
         if (p->settings != NULL) {
                 g_hash_table_destroy (p->settings);
