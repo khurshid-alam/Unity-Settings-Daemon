@@ -71,8 +71,8 @@
 #define FONT_RGBA_ORDER_KEY   "rgba-order"
 
 #define SCALING_SETTINGS_SCHEMA_FOR_DESKTOP (in_desktop ("Unity") ? \
-                                               UNITY_INTERFACE_SETTINGS_SCHEMA : \
-                                               INTERFACE_SETTINGS_SCHEMA)
+                                             UNITY_INTERFACE_SETTINGS_SCHEMA : \
+                                             INTERFACE_SETTINGS_SCHEMA)
 
 static gboolean in_desktop (const gchar *name);
 
@@ -962,7 +962,6 @@ xsettings_callback (GSettings             *settings,
                 } else if (manager->priv->freeze_settings_migrate_id == 0 &&
                            in_desktop ("Unity") &&
                            g_str_equal (schema_id, INTERFACE_SETTINGS_SCHEMA)) {
-                        /* Enable this only after a timeout... */
                         GSettings *unity_interface_settings;
                         GVariant *setting_value;
 
