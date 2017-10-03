@@ -2097,8 +2097,8 @@ static void
 do_text_size_action (GsdMediaKeysManager *manager,
 		     MediaKeyType         type)
 {
-        GSettings *settings;
-	gdouble factor, best, distance;
+	GSettings *settings;
+        gdouble factor, best, distance;
 	guint i;
 
 	/* Same values used in the Seeing tab of the Universal Access panel */

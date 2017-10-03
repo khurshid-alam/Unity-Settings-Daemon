@@ -1091,7 +1091,7 @@ static gboolean
 on_freeze_settings_migrate_timeout (gpointer data)
 {
         GnomeXSettingsManager *manager = data;
-        manager->priv->freeze_settings_migrate_id = FALSE;
+        manager->priv->freeze_settings_migrate_id = 0;
         return FALSE;
 }
 
