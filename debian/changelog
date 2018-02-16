@@ -1,3 +1,9 @@
+unity-settings-daemon (15.04.1+18.04.20180214.1-0ubuntu2) bionic; urgency=medium
+
+  * No-change rebuild against latest gnome-desktop3
+
+ -- Jeremy Bicha <jbicha@debian.org>  Thu, 15 Feb 2018 20:49:59 -0500
+
 unity-settings-daemon (15.04.1+18.04.20180214.1-0ubuntu1) bionic; urgency=medium
 
   [ Khurshid Alam ]
