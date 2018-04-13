@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MONITORS_FILES="monitors.xml monitors.xml.backup"
+MONITORS_FILES="monitors.xml monitors.xml.backup monitors-v1-backup.xml"
 config_path="$HOME/.config"
 
 if [ -n "$XDG_CONFIG_HOME" ]; then
@@ -17,3 +17,9 @@ for monitor_file in $MONITORS_FILES; do
         fi
     fi
 done
+
+if [ -f "$config_path/unity-monitors-v1-backup.xml" ] &&
+   [ ! -f "$config_path/unity-monitors.xml" ]; then
+   cp -v "$config_path/unity-monitors-v1-backup.xml" \
+         "$config_path/unity-monitors.xml"
+fi
