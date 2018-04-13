@@ -1,3 +1,16 @@
+unity-settings-daemon (15.04.1+18.04.20180216-0ubuntu2) UNRELEASED; urgency=medium
+
+  * gsd-rr-config: rename monitor config files to unity-monitors.xml*
+    (LP: #1763806)
+  * debian:
+    - build-depends on dh-migrations and run dh_migrations on post-install
+    - add debian/unity-settings-daemon.migrations to install migration files
+  * scripts/01-usd-migration-monitors-xml.sh:
+    - Move monitors.xml to unity-monitors.xml if migration is needed
+      (LP: #1763806)
+
+ -- Marco Trevisan (Treviño) <marco@ubuntu.com>  Fri, 13 Apr 2018 14:30:18 -0400
+
 unity-settings-daemon (15.04.1+18.04.20180216-0ubuntu1) bionic; urgency=medium
 
   * No-change rebuild against latest gnome-desktop3
