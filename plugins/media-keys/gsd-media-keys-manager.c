@@ -2453,8 +2453,8 @@ do_keyboard_brightness_action (GsdMediaKeysManager *manager,
 
 static void
 do_screenshot_action (GsdMediaKeysManager *manager,
-                      gint64               timestamp,
-                      MediaKeyType         type)
+                      MediaKeyType         type,
+                      gint64               timestamp)
 {
     switch (type){
         case SCREENSHOT_KEY:
@@ -2524,7 +2524,7 @@ do_action (GsdMediaKeysManager *manager,
                 do_sound_action (manager, deviceid, VOLUME_UP_KEY, TRUE, TRUE);
                 break;
         case LOGOUT_KEY:
-                do_logout_action (manager);
+                do_logout_action (manager, timestamp);
                 break;
         case EJECT_KEY:
                 do_eject_action (manager);
@@ -2550,10 +2550,10 @@ do_action (GsdMediaKeysManager *manager,
         case WINDOW_SCREENSHOT_CLIP_KEY:
         case AREA_SCREENSHOT_KEY:
         case AREA_SCREENSHOT_CLIP_KEY:
-                do_screenshot_action (manager, type);
+                do_screenshot_action (manager, type, timestamp);
                 break;
         case TERMINAL_KEY:
-                do_terminal_action (manager);
+                do_terminal_action (manager, timestamp);
                 break;
         case WWW_KEY:
                 do_url_action (manager, "http", timestamp);
