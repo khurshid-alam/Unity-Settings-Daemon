@@ -619,6 +619,7 @@ retry_grabs (gpointer data)
 {
         GsdMediaKeysManager *manager = data;
 
+        g_debug ("Retrying to grab accelerators");
         grab_media_keys (manager);
         return FALSE;
 }
@@ -638,8 +639,10 @@ grab_accelerators_complete (GObject      *object,
 
         if (error) {
                 retry = (error->code == G_DBUS_ERROR_UNKNOWN_METHOD);
-                if (!retry)
-                        g_warning ("%d: %s", error->code, error->message);
+                if (!retry && !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to grab accelerators: %s (%d)", error->message, error->code);
+                else if (retry)
+                        g_debug ("Failed to grab accelerators, will retry: %s (%d)", error->message, error->code);
                 g_error_free (error);
         } else {
                 int i;
@@ -688,9 +691,14 @@ grab_accelerator_complete (GObject      *object,
 {
         GrabData *data = user_data;
         MediaKey *key = data->key;
+        GError *error = NULL;
 
-        shell_key_grabber_call_grab_accelerator_finish (SHELL_KEY_GRABBER (object),
-                                                        &key->accel_id, result, NULL);
+        if (!shell_key_grabber_call_grab_accelerator_finish (SHELL_KEY_GRABBER (object),
+                                                             &key->accel_id, result, &error)) {
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to grab accelerator: %s", error->message);
+                g_error_free (error);
+        }
 
         g_slice_free (GrabData, data);
 }
@@ -758,8 +766,14 @@ ungrab_accelerator_complete (GObject      *object,
                              gpointer      user_data)
 {
 	GsdMediaKeysManager *manager = user_data;
-	shell_key_grabber_call_ungrab_accelerator_finish (SHELL_KEY_GRABBER (object),
-	                                                  NULL, result, NULL);
+
+        GError *error = NULL;
+        if (!shell_key_grabber_call_ungrab_accelerator_finish (SHELL_KEY_GRABBER (object),
+                                                               NULL, result, &error)) {
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to ungrab accelerator: %s", error->message);
+                g_error_free (error);
+        }
 }
 
 static void
@@ -2754,6 +2768,9 @@ on_accelerator_activated (ShellKeyGrabber     *grabber,
 {
         guint i;
 
+        g_debug ("Received accel id %u (device-id: %u, timestamp: %u",
+                                        accel_id, deviceid, timestamp);
+
         for (i = 0; i < manager->priv->keys->len; i++) {
                 MediaKey *key;
 
@@ -2768,6 +2785,8 @@ on_accelerator_activated (ShellKeyGrabber     *grabber,
                         do_action (manager, deviceid, key->key_type, timestamp);
                 return;
         }
+
+        g_warning ("Could not find accelerator for accel id %u", accel_id);
 }
 
 static void
@@ -2899,12 +2918,17 @@ on_key_grabber_ready (GObject      *source,
                       gpointer      data)
 {
         GsdMediaKeysManager *manager = data;
+        GError *error = NULL;
 
         manager->priv->key_grabber =
-		shell_key_grabber_proxy_new_for_bus_finish (result, NULL);
+		shell_key_grabber_proxy_new_for_bus_finish (result, &error);
 
-        if (!manager->priv->key_grabber)
+        if (!manager->priv->key_grabber) {
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to create proxy for key grabber: %s", error->message);
+                g_error_free (error);
                 return;
+        }
 
         g_signal_connect (manager->priv->key_grabber, "accelerator-activated",
                           G_CALLBACK (on_accelerator_activated), manager);
