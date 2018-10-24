@@ -223,7 +223,7 @@ struct GsdMediaKeysManagerPrivate
         GDBusConnection *connection;
         GCancellable    *bus_cancellable;
         GDBusProxy      *xrandr_proxy;
-        GCancellable    *cancellable;
+        GCancellable    *cancellable; /* Only used for XRandR operations */
 
         guint            start_idle_id;
 
@@ -1340,7 +1340,7 @@ do_lock_screensaver (GsdMediaKeysManager *manager)
                 priv->screen_saver_proxy = gnome_settings_bus_get_screen_saver_proxy ();
 
         gsd_screen_saver_call_lock (priv->screen_saver_proxy,
-                                    priv->cancellable,
+                                    priv->bus_cancellable,
                                     (GAsyncReadyCallback) on_screen_locked,
                                     manager);
 }
@@ -3340,7 +3340,8 @@ inhibit_done (GObject      *source,
 
         res = g_dbus_proxy_call_with_unix_fd_list_finish (proxy, &fd_list, result, &error);
         if (res == NULL) {
-                g_warning ("Unable to inhibit keypresses: %s", error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Unable to inhibit keypresses: %s", error->message);
                 g_error_free (error);
         } else {
                 g_variant_get (res, "(h)", &idx);
@@ -3439,7 +3440,8 @@ xrandr_ready_cb (GObject             *source_object,
 
         manager->priv->xrandr_proxy = g_dbus_proxy_new_finish (res, &error);
         if (manager->priv->xrandr_proxy == NULL) {
-                g_warning ("Failed to get proxy for XRandR operations: %s", error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to get proxy for XRandR operations: %s", error->message);
                 g_error_free (error);
         }
 }
@@ -3453,8 +3455,9 @@ power_ready_cb (GObject             *source_object,
 
         manager->priv->power_proxy = g_dbus_proxy_new_finish (res, &error);
         if (manager->priv->power_proxy == NULL) {
-                g_warning ("Failed to get proxy for power: %s",
-                           error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to get proxy for power: %s",
+                                   error->message);
                 g_error_free (error);
         }
 }
@@ -3468,8 +3471,9 @@ power_screen_ready_cb (GObject             *source_object,
 
         manager->priv->power_screen_proxy = g_dbus_proxy_new_finish (res, &error);
         if (manager->priv->power_screen_proxy == NULL) {
-                g_warning ("Failed to get proxy for power (screen): %s",
-                           error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to get proxy for power (screen): %s",
+                                   error->message);
                 g_error_free (error);
         }
 }
@@ -3483,8 +3487,9 @@ power_keyboard_ready_cb (GObject             *source_object,
 
         manager->priv->power_keyboard_proxy = g_dbus_proxy_new_finish (res, &error);
         if (manager->priv->power_keyboard_proxy == NULL) {
-                g_warning ("Failed to get proxy for power (keyboard): %s",
-                           error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Failed to get proxy for power (keyboard): %s",
+                                   error->message);
                 g_error_free (error);
         }
 }
@@ -3497,15 +3502,11 @@ on_bus_gotten (GObject             *source_object,
         GDBusConnection *connection;
         GError *error = NULL;
 
-        if (manager->priv->bus_cancellable == NULL ||
-            g_cancellable_is_cancelled (manager->priv->bus_cancellable)) {
-                g_warning ("Operation has been cancelled, so not retrieving session bus");
-                return;
-        }
 
         connection = g_bus_get_finish (res, &error);
         if (connection == NULL) {
-                g_warning ("Could not get session bus: %s", error->message);
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Could not get session bus: %s", error->message);
                 g_error_free (error);
                 return;
         }
