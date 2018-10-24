@@ -2225,7 +2225,7 @@ do_switch_input_source_action (GsdMediaKeysManager *manager,
         guint first;
         gint i, n;
 
-        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "ubuntu") != 0)
+        if (g_strcmp0 (g_getenv ("DESKTOP_SESSION"), "unity") != 0)
                 if (!priv->have_legacy_keygrabber)
                         return;
 
@@ -2940,7 +2940,7 @@ static gboolean
 session_has_key_grabber (void)
 {
         const gchar *session = g_getenv ("DESKTOP_SESSION");
-        return g_strcmp0 (session, "gnome") == 0 || g_strcmp0 (session, "ubuntu") == 0;
+        return g_strcmp0 (session, "gnome") == 0 || g_strcmp0 (session, "unity") == 0;
 }
 
 static void
