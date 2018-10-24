@@ -465,13 +465,13 @@ media_key_free (MediaKey *key)
         g_free (key);
 }
 
-static void
-set_launch_context_env (GsdMediaKeysManager *manager,
-			GAppLaunchContext   *launch_context)
+static char **
+get_keyring_env (GsdMediaKeysManager *manager)
 {
 	GError *error = NULL;
 	GVariant *variant, *item;
 	GVariantIter *iter;
+	char **envp;
 
 	variant = g_dbus_connection_call_sync (manager->priv->connection,
 					       GNOME_KEYRING_DBUS_NAME,
@@ -487,8 +487,11 @@ set_launch_context_env (GsdMediaKeysManager *manager,
 	if (variant == NULL) {
 		g_warning ("Failed to call GetEnvironment on keyring daemon: %s", error->message);
 		g_error_free (error);
-		return;
+		return NULL;
 	}
+
+	envp = g_get_environ ();
+	envp = g_environ_unsetenv (envp, "DESKTOP_AUTOSTART_ID");
 
 	g_variant_get (variant, "(a{ss})", &iter);
 
@@ -501,7 +504,7 @@ set_launch_context_env (GsdMediaKeysManager *manager,
 			       &key,
 			       &value);
 
-		g_app_launch_context_setenv (launch_context, key, value);
+		envp = g_environ_setenv (envp, key, value, TRUE);
 
 		g_variant_unref (item);
 		g_free (key);
@@ -510,6 +513,43 @@ set_launch_context_env (GsdMediaKeysManager *manager,
 
 	g_variant_iter_free (iter);
 	g_variant_unref (variant);
+
+	return envp;
+}
+
+static void
+execute (GsdMediaKeysManager *manager,
+         char                *cmd)
+{
+        gboolean retval;
+        char   **argv;
+        int      argc;
+        GError  *error = NULL;
+
+        retval = FALSE;
+
+        if (g_shell_parse_argv (cmd, &argc, &argv, NULL)) {
+		char   **envp;
+
+		envp = get_keyring_env (manager);
+
+                retval = g_spawn_async (g_get_home_dir (),
+                                        argv,
+                                        envp,
+                                        G_SPAWN_SEARCH_PATH,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        &error);
+
+                g_strfreev (argv);
+                g_strfreev (envp);
+        }
+
+        if (retval == FALSE) {
+                g_warning ("Couldn't execute command: %s: %s", cmd, error->message);
+                g_error_free (error);
+        }
 }
 
 static void
@@ -1033,9 +1073,8 @@ init_kbd (GsdMediaKeysManager *manager)
 }
 
 static void
-launch_app (GsdMediaKeysManager *manager,
-	    GAppInfo            *app_info,
-	    gint64               timestamp)
+launch_app (GAppInfo *app_info,
+	    gint64    timestamp)
 {
 	GError *error = NULL;
         GdkAppLaunchContext *launch_context;
@@ -1043,7 +1082,6 @@ launch_app (GsdMediaKeysManager *manager,
         /* setup the launch context so the startup notification is correct */
         launch_context = gdk_display_get_app_launch_context (gdk_display_get_default ());
         gdk_app_launch_context_set_timestamp (launch_context, timestamp);
-        set_launch_context_env (manager, G_APP_LAUNCH_CONTEXT (launch_context));
 
 	if (!g_app_info_launch (app_info, NULL, G_APP_LAUNCH_CONTEXT (launch_context), &error)) {
 		g_warning ("Could not launch '%s': %s",
@@ -1055,18 +1093,6 @@ launch_app (GsdMediaKeysManager *manager,
 }
 
 static void
-execute (GsdMediaKeysManager *manager,
-         char                *cmd,
-         gint64               timestamp)
-{
-	GAppInfo *app_info;
-
-	app_info = g_app_info_create_from_commandline (cmd, NULL, G_APP_INFO_CREATE_NONE, NULL);
-	launch_app (manager, app_info, timestamp);
-	g_object_unref (app_info);
-}
-
-static void
 do_url_action (GsdMediaKeysManager *manager,
                const char          *scheme,
                gint64               timestamp)
@@ -1075,7 +1101,7 @@ do_url_action (GsdMediaKeysManager *manager,
 
         app_info = g_app_info_get_default_for_uri_scheme (scheme);
         if (app_info != NULL) {
-                launch_app (manager, app_info, timestamp);
+                launch_app (app_info, timestamp);
                 g_object_unref (app_info);
         } else {
                 g_warning ("Could not find default application for '%s' scheme", scheme);
@@ -1090,7 +1116,7 @@ do_media_action (GsdMediaKeysManager *manager,
 
         app_info = g_app_info_get_default_for_type ("audio/x-vorbis+ogg", FALSE);
         if (app_info != NULL) {
-                launch_app (manager, app_info, timestamp);
+                launch_app (app_info, timestamp);
                 g_object_unref (app_info);
         } else {
                 g_warning ("Could not find default application for '%s' mime-type", "audio/x-vorbis+ogg");
@@ -1098,8 +1124,7 @@ do_media_action (GsdMediaKeysManager *manager,
 }
 
 static void
-do_terminal_action (GsdMediaKeysManager *manager,
-                    gint64               timestamp)
+do_terminal_action (GsdMediaKeysManager *manager)
 {
         GSettings *settings;
         char *term;
@@ -1108,7 +1133,7 @@ do_terminal_action (GsdMediaKeysManager *manager,
         term = g_settings_get_string (settings, "exec");
 
         if (term)
-        execute (manager, term, timestamp);
+        execute (manager, term, FALSE);
 
         g_free (term);
         g_object_unref (settings);
@@ -1139,10 +1164,9 @@ gnome_session_shutdown (GsdMediaKeysManager *manager)
 }
 
 static void
-do_logout_action (GsdMediaKeysManager *manager,
-                  gint64               timestamp)
+do_logout_action (GsdMediaKeysManager *manager)
 {
-        execute (manager, "gnome-session-quit --logout", timestamp);
+        execute (manager, "gnome-session-quit --logout", FALSE);
 }
 
 static void
@@ -1259,7 +1283,7 @@ do_execute_desktop_or_desktop (GsdMediaKeysManager *manager,
                 app_info = g_desktop_app_info_new (alt_desktop);
 
         if (app_info != NULL) {
-                launch_app (manager, G_APP_INFO (app_info), timestamp);
+                launch_app (G_APP_INFO (app_info), timestamp);
                 g_object_unref (app_info);
                 return;
         }
@@ -2439,27 +2463,26 @@ do_keyboard_brightness_action (GsdMediaKeysManager *manager,
 
 static void
 do_screenshot_action (GsdMediaKeysManager *manager,
-                      gint64               timestamp,
                       MediaKeyType         type)
 {
     switch (type){
         case SCREENSHOT_KEY:
-            execute (manager, "gnome-screenshot", timestamp);
+            execute (manager, "gnome-screenshot", FALSE);
             break;
         case WINDOW_SCREENSHOT_KEY:
-            execute (manager, "gnome-screenshot --window", timestamp);
+            execute (manager, "gnome-screenshot --window", FALSE);
             break;
         case AREA_SCREENSHOT_KEY:
-            execute (manager, "gnome-screenshot --area", timestamp);
+            execute (manager, "gnome-screenshot --area", FALSE);
             break;
         case SCREENSHOT_CLIP_KEY:
-            execute (manager, "gnome-screenshot --clipboard", timestamp);
+            execute (manager, "gnome-screenshot --clipboard", FALSE);
             break;
         case WINDOW_SCREENSHOT_CLIP_KEY:
-            execute (manager, "gnome-screenshot --window --clipboard", timestamp);
+            execute (manager, "gnome-screenshot --window --clipboard", FALSE);
             break;
         case AREA_SCREENSHOT_CLIP_KEY:
-            execute (manager, "gnome-screenshot --area --clipboard", timestamp);
+            execute (manager, "gnome-screenshot --area --clipboard", FALSE);
     }
 }
 
@@ -2471,7 +2494,7 @@ do_custom_action (GsdMediaKeysManager *manager,
 {
         g_debug ("Launching custom action for key (on device id %d)", deviceid);
 
-	execute (manager, key->custom_command, timestamp);
+	execute (manager, key->custom_command);
 }
 
 static gboolean
